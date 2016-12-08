@@ -1907,22 +1907,36 @@ void emulateRet(RContext* c, Instr* instr)
     }
 }
 
-// process an instruction
-// if this changes control flow, c.exit is set accordingly
-void processInstr(RContext* c, Instr* instr)
+typedef struct _ProcessingContext {
+    // instruction to be processed
+    Instr* instr;
+    // rewriter context
+    RContext* rc;
+
+    // in-out semantic of current instruction
+    FlagSet inFlags, outFlags, staticOutFlags;
+    int inOpCount, outOpCount;
+    Operand *in, *in2;
+    Operand *out, *out2;
+
+    // in/out values
+    EmuValue v1, v2;
+    EmuValue vres;
+
+} ProcessingContext;
+
+
+static
+void emulateInstr(ProcessingContext* pc)
 {
     EmuValue vres, v1, v2, addr;
     CaptureState cs;
     ValType vt;
 
+    RContext* c = pc->rc;
     Rewriter* r = c->r;
     EmuState* es = c->r->es;
-
-    if (instr->ptLen > 0) {
-        // memory addressing in captured instructions depends on emu state
-        capturePassThrough(c, instr, es);
-        return;
-    }
+    Instr* instr = pc->instr;
 
     switch(instr->type) {
 
@@ -1999,20 +2013,6 @@ void processInstr(RContext* c, Instr* instr)
         c->exit = v1.val;
         break;
     }
-
-    case IT_CLTQ:
-        // cltq: sign-extend eax to rax
-        es->reg[RI_A] = (int64_t) (int32_t) es->reg[RI_A];
-        if (!msIsStatic(es->reg_state[RI_A]))
-            capture(c, instr);
-        break;
-
-    case IT_CWTL:
-        // cwtl: sign-extend ax to eax
-        es->reg[RI_A] = (int32_t) (int16_t) es->reg[RI_A];
-        if (!msIsStatic(es->reg_state[RI_A]))
-            capture(c, instr);
-        break;
 
     case IT_CQTO:
         switch(instr->vtype) {
@@ -2819,3 +2819,144 @@ uint64_t processKnownTargets(RContext* c, uint64_t f)
     return f;
 }
 
+// get in/out behavior of an instruction
+static
+void getInOutSemantic(ProcessingContext* c)
+{
+    static Operand in, out;
+    Instr* instr = c->instr;
+
+    // init
+    c->inFlags = FS_None;
+    c->outFlags = FS_None;
+    c->staticOutFlags = FS_None;
+    c->in   = 0;
+    c->in2  = 0;
+    c->out  = 0;
+    c->out2 = 0;
+
+    switch(instr->type) {
+    case IT_CWTL:
+        setRegOp(&in, getReg(RT_GP16, RI_A));
+        setRegOp(&out, getReg(RT_GP32, RI_A));
+        c->in  = &in;
+        c->out = &out;
+        break;
+
+    case IT_CLTQ:
+        setRegOp(&in, getReg(RT_GP32, RI_A));
+        setRegOp(&out, getReg(RT_GP64, RI_A));
+        c->in  = &in;
+        c->out = &out;
+        break;
+
+    default:
+        break;
+    }
+
+    c->inOpCount  = (c->in  == 0) ? 0 : (c->in2  == 0) ? 1 : 2;
+    c->outOpCount = (c->out == 0) ? 0 : (c->out2 == 0) ? 1 : 2;
+}
+
+
+// process an instruction
+// if this changes control flow, c.exit is set accordingly
+void processInstr(RContext* rc, Instr* instr)
+{
+    ProcessingContext pc;
+    EmuState* es = rc->r->es;
+    CaptureState cs;
+
+    pc.instr = instr;
+    pc.rc = rc;
+
+    if (instr->ptLen > 0) {
+        // memory addressing in captured instructions depends on emu state
+        capturePassThrough(rc, instr, es);
+        return;
+    }
+
+    getInOutSemantic(&pc);
+    if (pc.inOpCount + pc.outOpCount == 0) {
+        // no in-out semantic given, handle in old way
+        emulateInstr(&pc);
+        return;
+    }
+
+    cs = CS_DEAD;
+    switch(pc.inOpCount) {
+    case 1:
+        getOpValue(&(pc.v1), es, pc.in);
+        cs = pc.v1.state.cState;
+        break;
+    case 2:
+        getOpValue(&(pc.v1), es, pc.in);
+        getOpValue(&(pc.v2), es, pc.in2);
+        cs = combineState(pc.v1.state.cState, pc.v2.state.cState, 0);
+        break;
+
+    default:
+        assert(0);
+    }
+
+    if (cs == CS_DYNAMIC) {
+        // some unknown input, just capture
+        switch(instr->type) {
+        case IT_CWTL:
+        case IT_CLTQ:
+            capture(rc, instr);
+            break;
+        default:
+            assert(0);
+        }
+
+        //state of all output is dynamic
+        setFlagsState(es, pc.outFlags, CS_DYNAMIC);
+        MetaState ms;
+        initMetaState(&ms, CS_DYNAMIC);
+        switch(pc.outOpCount) {
+        case 1:
+            setOpState(ms, es, pc.out);
+            break;
+        default:
+            assert(0);
+        }
+        return;
+    }
+
+    // all input static, emulate
+
+    switch(pc.outOpCount) {
+    case 1: pc.vres.type = opValType(pc.out); break;
+    default: assert(0);
+    }
+
+    switch(instr->type) {
+    case IT_CWTL:
+        // cwtl: sign-extend ax to eax
+        pc.vres.state = pc.v1.state;
+        pc.vres.val = (int32_t) (int16_t) pc.v1.val;
+        break;
+
+    case IT_CLTQ:
+        // cltq: sign-extend eax to rax
+        pc.vres.state = pc.v1.state;
+        pc.vres.val = (int64_t) (int32_t) pc.v1.val;
+        break;
+
+    default:
+        assert(0);
+    }
+
+    // write output into emulation state
+    switch(pc.outOpCount) {
+    case 1:
+        setOpValue(&(pc.vres), es, pc.out);
+        setOpState(pc.vres.state, es, pc.out);
+        break;
+
+    default:
+        assert(0);
+    }
+    setFlagsState(es, pc.outFlags, CS_STATIC);
+}
