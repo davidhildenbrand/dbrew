@@ -8,4 +8,6 @@ f1:
     mov %rdi,%rbx
     and $0xffffffffffffffff,%rbx
     add %rbx,%rax
+    and (%rsi),%rbx
+    add %rbx,%rax
     ret

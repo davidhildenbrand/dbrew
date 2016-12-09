@@ -1055,21 +1055,30 @@ void getMemValue(EmuValue* v, EmuValue* addr, EmuState* es, ValType t,
                  bool shouldBeStack)
 {
     EmuValue off;
-    int isOnStack;
 
-    isOnStack = getStackOffset(es, addr, &off);
-    if (isOnStack) {
-        v->type = t;
-        getStackValue(es, v, &off);
+    // we only can check if address is on stack if address is known
+    if (addr->state.cState == CS_STACKRELATIVE) {
+        bool isOnStack = getStackOffset(es, addr, &off);
+        if (isOnStack) {
+            v->type = t;
+            getStackValue(es, v, &off);
+            return;
+        }
+    }
+    assert(!shouldBeStack);
+
+    CaptureState cs = CS_DYNAMIC;
+    // explicit request to make memory access result static
+    if (addr->state.cState == CS_STATIC2) cs = CS_STATIC2;
+    initMetaState(&(v->state), cs);
+    v->type = t;
+
+    if (cs == CS_DYNAMIC) {
+        // do not access real memory, but return fake value 0
+        v->val = 0;
         return;
     }
 
-    assert(!shouldBeStack);
-    initMetaState(&(v->state), CS_DYNAMIC);
-    // explicit request to make memory access result static
-    if (addr->state.cState == CS_STATIC2) v->state.cState = CS_STATIC2;
-
-    v->type = t;
     switch(t) {
     case VT_8:  v->val = *(uint8_t*) addr->val; break;
     case VT_16: v->val = *(uint16_t*) addr->val; break;
@@ -1090,6 +1099,10 @@ void getSegMemValue(EmuValue* v, EmuValue* addr, ValType t, OpSegOverride s)
     // memory accessed via fs/gs always is dynamic
     initMetaState(&(v->state), CS_DYNAMIC);
     v->type = t;
+    // do not access real memory, but return fake value 0
+    v->val = 0;
+    return;
+
     switch(t) {
     case VT_8:
         switch(s) {
