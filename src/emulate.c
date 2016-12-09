@@ -862,38 +862,14 @@ void setFlagsAdd(EmuState* es, EmuValue* v1, EmuValue* v2)
 
 // for bitwise operations: And, Xor, Or
 static
-CaptureState setFlagsBit(EmuState* es, InstrType it,
-                         EmuValue* v1, EmuValue* v2, bool sameOperands)
+void setFlagsOnLogicResult(EmuState* es, uint64_t res, ValType t)
 {
-
-    CaptureState s;
-    uint64_t res;
-
-    assert(v1->type == v2->type);
-
-    s = combineState4Flags(v1->state.cState, v2->state.cState);
-    // xor op,op results in known zero
-    if ((it == IT_XOR) && sameOperands) s = CS_STATIC;
-    if ((it == IT_AND) &&
-        ((msIsStatic(v1->state) && (v1->val == 0)) ||
-         (msIsStatic(v2->state) && (v2->val == 0)))) s = CS_STATIC;
-
     // carry/overflow always cleared
     es->flag[FT_Carry] = 0;
     es->flag[FT_Overflow] = 0;
-    setFlagsState(es, FS_CO, CS_STATIC);
-
-    setFlagsState(es, FS_ZSP, s);
-
-    switch(it) {
-    case IT_AND: res = v1->val & v2->val; break;
-    case IT_XOR: res = v1->val ^ v2->val; break;
-    case IT_OR:  res = v1->val | v2->val; break;
-    default: assert(0);
-    }
 
     es->flag[FT_Parity] = PARITY(res & 0xff);
-    switch(v1->type) {
+    switch(t) {
     case VT_8:
         es->flag[FT_Zero] = ((res & ((1<<8)-1)) == 0);
         es->flag[FT_Sign] = ((res & (1l<<7)) != 0);
@@ -908,10 +884,35 @@ CaptureState setFlagsBit(EmuState* es, InstrType it,
         break;
     default: assert(0);
     }
+}
+
+static
+CaptureState setFlagsBit(EmuState* es, InstrType it,
+                         EmuValue* v1, EmuValue* v2, bool sameOperands)
+{
+
+    CaptureState s;
+    uint64_t res;
+
+    assert(v1->type == v2->type);
+
+    switch(it) {
+    case IT_AND: res = v1->val & v2->val; break;
+    case IT_XOR: res = v1->val ^ v2->val; break;
+    case IT_OR:  res = v1->val | v2->val; break;
+    default: assert(0);
+    }
+    setFlagsOnLogicResult(es, res, v1->type);
+
+    s = combineState4Flags(v1->state.cState, v2->state.cState);
+    // xor op,op results in known zero
+    if ((it == IT_XOR) && sameOperands) s = CS_STATIC;
+
+    setFlagsState(es, FS_CO, CS_STATIC);
+    setFlagsState(es, FS_ZSP, s);
 
     return s;
 }
-
 
 // helpers for capture processing
 
@@ -1512,9 +1513,8 @@ void captureBinaryOp(RContext* c, Instr* orig, EmuState* es, EmuValue* res)
     Instr i;
     Operand *o;
 
-    if (res->state.cState == CS_DEAD) return;
-
-    if (msIsStatic(res->state)) {
+    if (res && (res->state.cState == CS_DEAD)) return;
+    if (res && (msIsStatic(res->state))) {
         // force results to become unknown?
         if (c->r->cc->force_unknown[es->depth]) {
             initMetaState(&(res->state), CS_DYNAMIC);
@@ -1571,7 +1571,8 @@ void captureBinaryOp(RContext* c, Instr* orig, EmuState* es, EmuValue* res)
         }
         o = getImmOp(opval.type, opval.val);
     }
-    initBinaryInstr(&i, orig->type, res->type, &(orig->dst), o);
+    initBinaryInstr(&i, orig->type,
+                    opValType(&(orig->dst)), &(orig->dst), o);
     applyStaticToInd(&(i.dst), es);
     applyStaticToInd(&(i.src), es);
     capture(c, &i);
@@ -1914,8 +1915,11 @@ typedef struct _ProcessingContext {
     RContext* rc;
 
     // in-out semantic of current instruction
-    FlagSet inFlags, outFlags, staticOutFlags;
-    int inOpCount, outOpCount;
+    FlagSet inFlags;        // flags used as input
+    FlagSet outFlags;       // flags set depending on result
+    FlagSet staticOutFlags; // flags set to known value (e.g. cleared)
+    int inOpCount;          // number of input operands
+    int outOpCount;         // number of output operands
     Operand *in, *in2;
     Operand *out, *out2;
 
@@ -1926,8 +1930,13 @@ typedef struct _ProcessingContext {
 } ProcessingContext;
 
 
+// TODO: remove this function by adding instruction handling
+// - in getInOutSemantic()
+// - eventually in isStaticDueToInput()
+// - emulateInstr()
+// - processInstr() in switch for capturing
 static
-void emulateInstr(ProcessingContext* pc)
+void emulateInstrAndState(ProcessingContext* pc)
 {
     EmuValue vres, v1, v2, addr;
     CaptureState cs;
@@ -2751,30 +2760,6 @@ void emulateInstr(ProcessingContext* pc)
         captureTest(c, instr, es, cs);
         break;
 
-    case IT_XOR:
-    case IT_OR:
-    case IT_AND:
-        getOpValue(&v1, es, &(instr->dst));
-        getOpValue(&v2, es, &(instr->src));
-
-        assert(v1.type == v2.type);
-        cs = setFlagsBit(es, instr->type, &v1, &v2,
-                         opIsEqual(&(instr->dst), &(instr->src)));
-        switch(instr->type) {
-        case IT_AND: vres.val = v1.val & v2.val; break;
-        case IT_XOR: vres.val = v1.val ^ v2.val; break;
-        case IT_OR:  vres.val = v1.val | v2.val; break;
-        default: assert(0);
-        }
-        vres.type = v1.type;
-        initMetaState(&(vres.state), cs);
-
-        // for capturing we need state of original dst
-        captureBinaryOp(c, instr, es, &vres);
-        setOpValue(&vres, es, &(instr->dst));
-        setOpState(vres.state, es, &(instr->dst));
-        break;
-
     case IT_ADDSS:
     case IT_ADDSD:
     case IT_ADDPS:
@@ -2850,6 +2835,16 @@ void getInOutSemantic(ProcessingContext* c)
         c->out = &out;
         break;
 
+    case IT_XOR:
+    case IT_OR:
+    case IT_AND:
+        c->in  = &(instr->dst);
+        c->in2 = &(instr->src);
+        c->out = &(instr->dst);
+        c->outFlags = FS_ZSP;
+        c->staticOutFlags = FS_CO;
+        break;
+
     default:
         break;
     }
@@ -2858,9 +2853,111 @@ void getInOutSemantic(ProcessingContext* c)
     c->outOpCount = (c->out == 0) ? 0 : (c->out2 == 0) ? 1 : 2;
 }
 
+#define UINT64_ALL1 (0xFFFFFFFFFFFFFFFFull)
 
-// process an instruction
-// if this changes control flow, c.exit is set accordingly
+
+// check if the result becomes known due to input even though not
+// all input values are known
+static
+bool isStaticDueToInput(ProcessingContext* c)
+{
+    EmuState* es = c->rc->r->es;
+
+    // if static, only need to set c->vres.val
+    switch(c->instr->type) {
+    case IT_AND:
+        assert(c->inOpCount == 2);
+        assert(c->outOpCount == 1);
+        assert(c->v1.type == c->v2.type);
+        if ( (msIsStatic(c->v1.state) && (c->v1.val == 0)) ||
+             (msIsStatic(c->v2.state) && (c->v2.val == 0)) ) {
+            c->vres.val = 0;
+            setFlagsOnLogicResult(es, c->vres.val, c->v1.type);
+            return true;
+        }
+        break;
+
+    case IT_OR:
+        assert(c->inOpCount == 2);
+        assert(c->outOpCount == 1);
+        assert(c->v1.type == c->v2.type);
+        if ( (msIsStatic(c->v1.state) && (c->v1.val == UINT64_ALL1)) ||
+             (msIsStatic(c->v2.state) && (c->v2.val == UINT64_ALL1)) ) {
+            c->vres.val = UINT64_ALL1;
+            setFlagsOnLogicResult(es, c->vres.val, c->v1.type);
+            return true;
+        }
+        break;
+
+    case IT_XOR:
+        // becomes known zero with same operands
+        assert(c->inOpCount == 2);
+        assert(c->outOpCount == 1);
+        assert(c->v1.type == c->v2.type);
+        if (opIsEqual(c->in, c->in2)) {
+            c->vres.val = 0;
+            setFlagsOnLogicResult(es, c->vres.val, c->v1.type);
+            return true;
+        }
+        break;
+
+    default:
+        break;
+    }
+    return false;
+}
+
+// emulate an instruction
+// input operands to be taken from, and output operands to be written
+// to a processing context <pc>
+// type/state of output (e.g. for pc->vres) will be set afterwards
+static
+void emulateInstr(ProcessingContext* pc)
+{
+    EmuState* es = pc->rc->r->es;
+    Instr* instr = pc->instr;
+
+    switch(instr->type) {
+    case IT_CWTL:
+        // cwtl: sign-extend ax to eax
+        pc->vres.val = (int32_t) (int16_t) pc->v1.val;
+        break;
+
+    case IT_CLTQ:
+        // cltq: sign-extend eax to rax
+        pc->vres.val = (int64_t) (int32_t) pc->v1.val;
+        break;
+
+    case IT_XOR:
+    case IT_OR:
+    case IT_AND:
+        assert(pc->v1.type == pc->v2.type);
+        switch(instr->type) {
+        case IT_AND: pc->vres.val = pc->v1.val & pc->v2.val; break;
+        case IT_XOR: pc->vres.val = pc->v1.val ^ pc->v2.val; break;
+        case IT_OR:  pc->vres.val = pc->v1.val | pc->v2.val; break;
+        default: assert(0);
+        }
+        setFlagsOnLogicResult(es, pc->vres.val, pc->v1.type);
+        break;
+
+    default:
+        assert(0);
+    }
+}
+
+/* Process an instruction
+ *
+ * - if all input is known which the result depends on:
+ *   - emulate it
+ *   - set result to known
+ *   - if result goes to memory, generate code to store known result
+ * - otherwise:
+ *   - generate instruction similar to original, with known operands
+ *     replaced by values
+ *
+ * if this changes control flow, c.exit is set accordingly
+*/
 void processInstr(RContext* rc, Instr* instr)
 {
     ProcessingContext pc;
@@ -2879,7 +2976,7 @@ void processInstr(RContext* rc, Instr* instr)
     getInOutSemantic(&pc);
     if (pc.inOpCount + pc.outOpCount == 0) {
         // no in-out semantic given, handle in old way
-        emulateInstr(&pc);
+        emulateInstrAndState(&pc);
         return;
     }
 
@@ -2899,6 +2996,15 @@ void processInstr(RContext* rc, Instr* instr)
         assert(0);
     }
 
+    bool outputSet = false;
+
+    // check for static result due to input
+    if ((pc.outOpCount == 1) && isStaticDueToInput(&pc)) {
+        // output in vres, with value/type already set
+        cs = CS_STATIC2;
+        outputSet = true;
+    }
+
     if (cs == CS_DYNAMIC) {
         // some unknown input, just capture
         switch(instr->type) {
@@ -2906,12 +3012,19 @@ void processInstr(RContext* rc, Instr* instr)
         case IT_CLTQ:
             capture(rc, instr);
             break;
+        case IT_XOR:
+        case IT_OR:
+        case IT_AND:
+            captureBinaryOp(rc, instr, es, 0);
+            break;
         default:
             assert(0);
         }
 
-        //state of all output is dynamic
+        // state of all output is dynamic (apart from staticOutFlags)
         setFlagsState(es, pc.outFlags, CS_DYNAMIC);
+        setFlagsState(es, pc.staticOutFlags, CS_STATIC);
+
         MetaState ms;
         initMetaState(&ms, CS_DYNAMIC);
         switch(pc.outOpCount) {
@@ -2924,33 +3037,19 @@ void processInstr(RContext* rc, Instr* instr)
         return;
     }
 
-    // all input static, emulate
-
-    switch(pc.outOpCount) {
-    case 1: pc.vres.type = opValType(pc.out); break;
-    default: assert(0);
+    if (!outputSet) {
+        // all input static: emulate
+        emulateInstr(&pc);
     }
 
-    switch(instr->type) {
-    case IT_CWTL:
-        // cwtl: sign-extend ax to eax
-        pc.vres.state = pc.v1.state;
-        pc.vres.val = (int32_t) (int16_t) pc.v1.val;
-        break;
+    // TODO: config may want result to become dynamic
+    //       also if written to memory where state is not tracked
 
-    case IT_CLTQ:
-        // cltq: sign-extend eax to rax
-        pc.vres.state = pc.v1.state;
-        pc.vres.val = (int64_t) (int32_t) pc.v1.val;
-        break;
-
-    default:
-        assert(0);
-    }
-
-    // write output into emulation state
+    // write output into emulation state (flag values already updated)
     switch(pc.outOpCount) {
     case 1:
+        initMetaState(&(pc.vres.state), cs);
+        pc.vres.type = opValType(pc.out);
         setOpValue(&(pc.vres), es, pc.out);
         setOpState(pc.vres.state, es, pc.out);
         break;
@@ -2959,4 +3058,5 @@ void processInstr(RContext* rc, Instr* instr)
         assert(0);
     }
     setFlagsState(es, pc.outFlags, CS_STATIC);
+    setFlagsState(es, pc.staticOutFlags, CS_STATIC);
 }
