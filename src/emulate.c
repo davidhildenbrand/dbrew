@@ -819,25 +819,17 @@ CaptureState setFlagsSub(EmuState* es, EmuValue* v1, EmuValue* v2)
 }
 
 
-// set flags for operation "v1 + v2"
+// set flags for operation "d + s", return result
 static
-void setFlagsAdd(EmuState* es, EmuValue* v1, EmuValue* v2)
+uint64_t setFlagsForAdd(EmuState* es, uint64_t d, uint64_t s, ValType vt)
 {
-    CaptureState st;
-    uint64_t r, cc, d, s;
+    uint64_t r, cc;
 
-    st = combineState4Flags(v1->state.cState, v2->state.cState);
-    setFlagsState(es, FS_CZSOP, st);
-
-    assert(v1->type == v2->type);
-
-    d = v1->val;
-    s = v2->val;
     r = d + s;
     cc = (r & (~d | s)) | (~d & s);
 
     es->flag[FT_Parity] = PARITY(r & 0xff);
-    switch(v1->type) {
+    switch(vt) {
     case VT_8:
         es->flag[FT_Carry]    = (cc >> 7) & 1;
         es->flag[FT_Zero]     = ((r & ((1<<8)-1)) == 0);
@@ -858,7 +850,9 @@ void setFlagsAdd(EmuState* es, EmuValue* v1, EmuValue* v2)
         break;
     default: assert(0);
     }
+    return r;
 }
+
 
 // for bitwise operations: And, Xor, Or
 static
@@ -1962,44 +1956,6 @@ void emulateInstrAndState(ProcessingContext* pc)
 
     switch(instr->type) {
 
-    case IT_ADD:
-        getOpValue(&v1, es, &(instr->dst));
-        getOpValue(&v2, es, &(instr->src));
-
-        vt = opValType(&(instr->dst));
-        // sign-extend src/v2 if needed
-        if (instr->src.type == OT_Imm8) {
-            // sign-extend to 64bit (may be cutoff later)
-            v2.val = (int64_t) (int8_t) v2.val;
-            v2.type = vt;
-        }
-
-        setFlagsAdd(es, &v1, &v2);
-        assert(v1.type == v2.type); // should not happen, internal error
-
-        switch(vt) {
-        case VT_32:
-            vres.val = ((uint32_t) v1.val + (uint32_t) v2.val);
-            break;
-
-        case VT_64:
-            vres.val = v1.val + v2.val;
-            break;
-
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        vres.type = vt;
-        cs = combineState(v1.state.cState, v2.state.cState, 0);
-        initMetaState(&(vres.state), cs);
-
-        // for capture we need state of dst, do before setting dst
-        captureBinaryOp(c, instr, es, &vres);
-        setOpValue(&vres, es, &(instr->dst));
-        setOpState(vres.state, es, &(instr->dst));
-        break;
-
     case IT_CALL: {
         // TODO: keep call. For now, we always inline
         getOpValue(&v1, es, &(instr->dst));
@@ -2834,6 +2790,13 @@ void getInOutSemantic(ProcessingContext* c)
     c->out2 = 0;
 
     switch(instr->type) {
+    case IT_ADD:
+        c->in  = &(instr->dst);
+        c->in2 = &(instr->src);
+        c->out = &(instr->dst);
+        c->outFlags = FS_CZSOP;
+        break;
+
     case IT_CWTL:
         setRegOp(&in, getReg(RT_GP16, RI_A));
         setRegOp(&out, getReg(RT_GP32, RI_A));
@@ -2931,6 +2894,33 @@ void emulateInstr(ProcessingContext* pc)
     Instr* instr = pc->instr;
 
     switch(instr->type) {
+    case IT_ADD: {
+        ValType vt = opValType(pc->out);
+        uint64_t v1, v2;
+        // sign-extend src/v2 if needed
+        if (instr->src.type == OT_Imm8) {
+            // sign-extend to 64bit (may be cutoff later)
+            pc->v2.val = (int64_t) (int8_t) pc->v2.val;
+            pc->v2.type = vt;
+        }
+        assert(pc->v1.type == pc->v2.type);
+        switch(vt) {
+        case VT_32:
+            v1 = (uint32_t) pc->v1.val;
+            v2 = (uint32_t) pc->v2.val;
+            break;
+        case VT_64:
+            v1 = pc->v1.val;
+            v2 = pc->v2.val;
+            break;
+        default:
+            setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
+            return;
+        }
+        pc->vres.val = setFlagsForAdd(es, v1, v2, vt);
+        break;
+    }
+
     case IT_CWTL:
         // cwtl: sign-extend ax to eax
         pc->vres.val = (int32_t) (int16_t) pc->v1.val;
@@ -2955,7 +2945,7 @@ void emulateInstr(ProcessingContext* pc)
         break;
 
     default:
-        assert(0);
+        setEmulatorError(pc->rc, instr, ET_UnsupportedInstr, 0);
     }
 }
 
@@ -3025,9 +3015,10 @@ void processInstr(RContext* rc, Instr* instr)
         case IT_CLTQ:
             capture(rc, instr);
             break;
-        case IT_XOR:
-        case IT_OR:
+        case IT_ADD:
         case IT_AND:
+        case IT_OR:
+        case IT_XOR:
             captureBinaryOp(rc, instr, es, 0);
             break;
         default:
@@ -3053,6 +3044,7 @@ void processInstr(RContext* rc, Instr* instr)
     if (!outputSet) {
         // all input static: emulate
         emulateInstr(&pc);
+        if (pc.rc->e) return;
     }
 
     // TODO: config may want result to become dynamic
