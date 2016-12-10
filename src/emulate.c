@@ -880,6 +880,31 @@ void setFlagsOnLogicResult(EmuState* es, uint64_t res, ValType t)
     }
 }
 
+// for inc, dec operations, setting ZSOP
+static
+void setFlagsForInc(EmuState* es, uint64_t res, ValType t)
+{
+    // TODO: correct?
+    es->flag[FT_Overflow] = (res == 0);
+
+    es->flag[FT_Parity] = PARITY(res & 0xff);
+    switch(t) {
+    case VT_8:
+        es->flag[FT_Zero] = ((res & ((1<<8)-1)) == 0);
+        es->flag[FT_Sign] = ((res & (1l<<7)) != 0);
+        break;
+    case VT_32:
+        es->flag[FT_Zero] = ((res & ((1l<<32)-1)) == 0);
+        es->flag[FT_Sign] = ((res & (1l<<31)) != 0);
+        break;
+    case VT_64:
+        es->flag[FT_Zero] = (res == 0);
+        es->flag[FT_Sign] = ((res & (1l<<63)) != 0);
+        break;
+    default: assert(0);
+    }
+}
+
 static
 CaptureState setFlagsBit(EmuState* es, InstrType it,
                          EmuValue* v1, EmuValue* v2, bool sameOperands)
@@ -2055,31 +2080,6 @@ void emulateInstrAndState(ProcessingContext* pc)
         captureCmp(c, instr, es, cs);
         break;
 
-    case IT_DEC:
-        getOpValue(&v1, es, &(instr->dst));
-
-        vres.type = v1.type;
-        initMetaState(&(vres.state), v1.state.cState);
-        switch(instr->dst.type) {
-        case OT_Reg32:
-        case OT_Ind32:
-            vres.val = (uint32_t)(((int32_t) v1.val) - 1);
-            break;
-
-        case OT_Reg64:
-        case OT_Ind64:
-            vres.val = (uint64_t)(((int64_t) v1.val) - 1);
-            break;
-
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        captureUnaryOp(c, instr, es, &vres);
-        setOpValue(&vres, es, &(instr->dst));
-        setOpState(vres.state, es, &(instr->dst));
-        break;
-
     case IT_IMUL:
         getOpValue(&v1, es, &(instr->dst));
         getOpValue(&v2, es, &(instr->src));
@@ -2159,30 +2159,6 @@ void emulateInstrAndState(ProcessingContext* pc)
         initMetaState(&(es->reg_state[RI_A]), cs);
         break;
     }
-    case IT_INC:
-        getOpValue(&v1, es, &(instr->dst));
-
-        vres.type = v1.type;
-        initMetaState(&(vres.state), v1.state.cState);
-        switch(instr->dst.type) {
-        case OT_Reg32:
-        case OT_Ind32:
-            vres.val = (uint32_t)(((int32_t) v1.val) + 1);
-            break;
-
-        case OT_Reg64:
-        case OT_Ind64:
-            vres.val = (uint64_t)(((int64_t) v1.val) + 1);
-            break;
-
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        captureUnaryOp(c, instr, es, &vres);
-        setOpValue(&vres, es, &(instr->dst));
-        setOpState(vres.state, es, &(instr->dst));
-        break;
 
     case IT_JO:
         if (msIsDynamic(es->flag_state[FT_Overflow])) {
@@ -2797,6 +2773,13 @@ void getInOutSemantic(ProcessingContext* c)
         c->outFlags = FS_CZSOP;
         break;
 
+    case IT_DEC:
+    case IT_INC:
+        c->in  = &(instr->dst);
+        c->out = &(instr->dst);
+        c->outFlags = FS_ZSOP;
+        break;
+
     case IT_CWTL:
         setRegOp(&in, getReg(RT_GP16, RI_A));
         setRegOp(&out, getReg(RT_GP32, RI_A));
@@ -2921,6 +2904,40 @@ void emulateInstr(ProcessingContext* pc)
         break;
     }
 
+    case IT_INC: {
+        ValType vt = opValType(pc->out);
+        switch(vt) {
+        case VT_32:
+            pc->vres.val = (uint32_t)(((int32_t) pc->v1.val) + 1);
+            break;
+        case VT_64:
+            pc->vres.val = (uint64_t)(((int64_t) pc->v1.val) + 1);
+            break;
+        default:
+            setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
+            return;
+        }
+        setFlagsForInc(es, pc->vres.val, vt);
+        break;
+    }
+
+    case IT_DEC: {
+        ValType vt = opValType(pc->out);
+        switch(vt) {
+        case VT_32:
+            pc->vres.val = (uint32_t)(((int32_t) pc->v1.val) - 1);
+            break;
+        case VT_64:
+            pc->vres.val = (uint64_t)(((int64_t) pc->v1.val) - 1);
+            break;
+        default:
+            setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
+            return;
+        }
+        setFlagsForInc(es, pc->vres.val, vt); // also works for dec
+        break;
+    }
+
     case IT_CWTL:
         // cwtl: sign-extend ax to eax
         pc->vres.val = (int32_t) (int16_t) pc->v1.val;
@@ -3015,10 +3032,18 @@ void processInstr(RContext* rc, Instr* instr)
         case IT_CLTQ:
             capture(rc, instr);
             break;
-        case IT_ADD:
+        case IT_DEC:
+        case IT_INC:
+            captureUnaryOp(rc, instr, es, 0);
+            break;
         case IT_AND:
         case IT_OR:
         case IT_XOR:
+            // CO flags always cleared
+            es->flag[FT_Carry] = 0;
+            es->flag[FT_Overflow] = 0;
+            // fall through
+        case IT_ADD:
             captureBinaryOp(rc, instr, es, 0);
             break;
         default:

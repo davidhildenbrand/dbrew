@@ -195,6 +195,7 @@ typedef enum _FlagSet {
 } FlagSet;
 
 #define FS_CZSOP (FS_Carry|FS_Zero|FS_Sign|FS_Overflow|FS_Parity)
+#define FS_ZSOP  (FS_Zero|FS_Sign|FS_Overflow|FS_Parity)
 #define FS_CO    (FS_Carry|FS_Overflow)
 #define FS_ZSP   (FS_Zero|FS_Sign|FS_Parity)
 
