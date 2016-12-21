@@ -819,6 +819,38 @@ CaptureState setFlagsSub(EmuState* es, EmuValue* v1, EmuValue* v2)
 }
 
 
+// set flags for operation "d - s", return result
+static
+uint64_t setFlagsForSub(EmuState* es, uint64_t d, uint64_t s, ValType vt)
+{
+    uint64_t r, bc;
+
+    r = d - s;
+    bc = (r & (~d | s)) | (~d & s);
+
+    es->flag[FT_Zero]   = (d == s);
+    es->flag[FT_Parity] = PARITY(r & 0xff);
+    switch(vt) {
+    case VT_8:
+        es->flag[FT_Sign]     = (r >> 7) & 1;
+        es->flag[FT_Carry]    = (bc >>7) & 1;
+        es->flag[FT_Overflow] = XOR2(bc >> 6);
+        break;
+    case VT_32:
+        es->flag[FT_Sign]     = (r >> 31) & 1;
+        es->flag[FT_Carry]    = (bc >>31) & 1;
+        es->flag[FT_Overflow] = XOR2(bc >> 30);
+        break;
+    case VT_64:
+        es->flag[FT_Sign]     = (r >> 63) & 1;
+        es->flag[FT_Carry]    = (bc >>63) & 1;
+        es->flag[FT_Overflow] = XOR2(bc >> 62);
+        break;
+    default: assert(0);
+    }
+    return r;
+}
+
 // set flags for operation "d + s", return result
 static
 uint64_t setFlagsForAdd(EmuState* es, uint64_t d, uint64_t s, ValType vt)
@@ -2654,48 +2686,6 @@ void emulateInstrAndState(ProcessingContext* pc)
         setOpState(vres.state, es, &(instr->dst));
         break;
 
-    case IT_SUB:
-        getOpValue(&v1, es, &(instr->dst));
-        getOpValue(&v2, es, &(instr->src));
-
-        vt = opValType(&(instr->dst));
-        // sign-extend src/v2 if needed
-        if (instr->src.type == OT_Imm8) {
-            // sign-extend to 64bit (may be cutoff later)
-            v2.val = (int64_t) (int8_t) v2.val;
-            v2.type = vt;
-        }
-        else if (instr->src.type == OT_Imm32 && vt == VT_64) {
-            // sign-extend to 64bit (may be cutoff later)
-            v2.val = (int64_t) (int32_t) v2.val;
-            v2.type = vt;
-        }
-
-        setFlagsSub(es, &v1, &v2);
-        assert(v1.type == v2.type);
-
-        switch(vt) {
-        case VT_32:
-            vres.val = ((uint32_t) v1.val - (uint32_t) v2.val);
-            break;
-
-        case VT_64:
-            vres.val = v1.val - v2.val;
-            break;
-
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        vres.type = vt;
-        cs = combineState(v1.state.cState, v2.state.cState, 0);
-        initMetaState(&(vres.state), cs);
-        // for capturing we need state of original dst, do before setting dst
-        captureBinaryOp(c, instr, es, &vres);
-        setOpValue(&vres, es, &(instr->dst));
-        setOpState(vres.state, es, &(instr->dst));
-        break;
-
     case IT_TEST:
         getOpValue(&v1, es, &(instr->dst));
         getOpValue(&v2, es, &(instr->src));
@@ -2767,6 +2757,7 @@ void getInOutSemantic(ProcessingContext* c)
 
     switch(instr->type) {
     case IT_ADD:
+    case IT_SUB:
         c->in  = &(instr->dst);
         c->in2 = &(instr->src);
         c->out = &(instr->dst);
@@ -2877,13 +2868,19 @@ void emulateInstr(ProcessingContext* pc)
     Instr* instr = pc->instr;
 
     switch(instr->type) {
-    case IT_ADD: {
+    case IT_ADD:
+    case IT_SUB: {
         ValType vt = opValType(pc->out);
         uint64_t v1, v2;
         // sign-extend src/v2 if needed
         if (instr->src.type == OT_Imm8) {
             // sign-extend to 64bit (may be cutoff later)
             pc->v2.val = (int64_t) (int8_t) pc->v2.val;
+            pc->v2.type = vt;
+        }
+        else if ((instr->src.type == OT_Imm32) && (vt == VT_64)) {
+            // sign-extend to 64bit
+            pc->v2.val = (int64_t) (int32_t) pc->v2.val;
             pc->v2.type = vt;
         }
         assert(pc->v1.type == pc->v2.type);
@@ -2900,7 +2897,15 @@ void emulateInstr(ProcessingContext* pc)
             setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
             return;
         }
-        pc->vres.val = setFlagsForAdd(es, v1, v2, vt);
+        switch(instr->type) {
+        case IT_ADD:
+            pc->vres.val = setFlagsForAdd(es, v1, v2, vt);
+            break;
+        case IT_SUB:
+            pc->vres.val = setFlagsForSub(es, v1, v2, vt);
+            break;
+        default: assert(0);
+        }
         break;
     }
 
@@ -3044,6 +3049,7 @@ void processInstr(RContext* rc, Instr* instr)
             es->flag[FT_Overflow] = 0;
             // fall through
         case IT_ADD:
+        case IT_SUB:
             captureBinaryOp(rc, instr, es, 0);
             break;
         default:
