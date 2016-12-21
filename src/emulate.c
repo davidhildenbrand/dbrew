@@ -937,33 +937,6 @@ void setFlagsForInc(EmuState* es, uint64_t res, ValType t)
     }
 }
 
-static
-CaptureState setFlagsBit(EmuState* es, InstrType it,
-                         EmuValue* v1, EmuValue* v2, bool sameOperands)
-{
-
-    CaptureState s;
-    uint64_t res;
-
-    assert(v1->type == v2->type);
-
-    switch(it) {
-    case IT_AND: res = v1->val & v2->val; break;
-    case IT_XOR: res = v1->val ^ v2->val; break;
-    case IT_OR:  res = v1->val | v2->val; break;
-    default: assert(0);
-    }
-    setFlagsOnLogicResult(es, res, v1->type);
-
-    s = combineState4Flags(v1->state.cState, v2->state.cState);
-    // xor op,op results in known zero
-    if ((it == IT_XOR) && sameOperands) s = CS_STATIC;
-
-    setFlagsState(es, FS_CO, CS_STATIC);
-    setFlagsState(es, FS_ZSP, s);
-
-    return s;
-}
 
 // helpers for capture processing
 
@@ -1700,19 +1673,6 @@ void captureCmp(RContext* c, Instr* orig, EmuState* es, CaptureState cs)
         o = getImmOp(opval.type, opval.val);
 
     initBinaryInstr(&i, IT_CMP, orig->vtype, &(orig->dst), o);
-    applyStaticToInd(&(i.dst), es);
-    applyStaticToInd(&(i.src), es);
-    capture(c, &i);
-}
-
-static
-void captureTest(RContext* c, Instr* orig, EmuState* es, CaptureState cs)
-{
-    Instr i;
-
-    if (csIsStatic(cs)) return;
-
-    initBinaryInstr(&i, IT_TEST, orig->vtype, &(orig->dst), &(orig->src));
     applyStaticToInd(&(i.dst), es);
     applyStaticToInd(&(i.src), es);
     capture(c, &i);
@@ -2609,15 +2569,6 @@ void emulateInstrAndState(ProcessingContext* pc)
         setOpState(vres.state, es, &(instr->dst));
         break;
 
-    case IT_TEST:
-        getOpValue(&v1, es, &(instr->dst));
-        getOpValue(&v2, es, &(instr->src));
-
-        assert(v1.type == v2.type);
-        cs = setFlagsBit(es, IT_AND, &v1, &v2, false);
-        captureTest(c, instr, es, cs);
-        break;
-
     case IT_ADDSS:
     case IT_ADDSD:
     case IT_ADDPS:
@@ -2717,9 +2668,11 @@ void getInOutSemantic(ProcessingContext* c)
     case IT_XOR:
     case IT_OR:
     case IT_AND:
+        c->out = &(instr->dst);
+        // fall through
+    case IT_TEST:
         c->in  = &(instr->dst);
         c->in2 = &(instr->src);
-        c->out = &(instr->dst);
         c->outFlags = FS_ZSP;
         c->staticOutFlags = FS_CO;
         break;
@@ -2744,9 +2697,9 @@ bool isStaticDueToInput(ProcessingContext* c)
 
     // if static, only need to set c->vres.val
     switch(c->instr->type) {
+    case IT_TEST:
     case IT_AND:
         assert(c->inOpCount == 2);
-        assert(c->outOpCount == 1);
         assert(c->v1.type == c->v2.type);
         if ( (msIsStatic(c->v1.state) && (c->v1.val == 0)) ||
              (msIsStatic(c->v2.state) && (c->v2.val == 0)) ) {
@@ -2941,12 +2894,20 @@ void emulateInstr(ProcessingContext* pc)
 
     case IT_XOR:
     case IT_OR:
+    case IT_TEST:
     case IT_AND:
         assert(pc->v1.type == pc->v2.type);
         switch(instr->type) {
-        case IT_AND: pc->vres.val = pc->v1.val & pc->v2.val; break;
-        case IT_XOR: pc->vres.val = pc->v1.val ^ pc->v2.val; break;
-        case IT_OR:  pc->vres.val = pc->v1.val | pc->v2.val; break;
+        case IT_TEST:
+        case IT_AND:
+            pc->vres.val = pc->v1.val & pc->v2.val;
+            break;
+        case IT_XOR:
+            pc->vres.val = pc->v1.val ^ pc->v2.val;
+            break;
+        case IT_OR:
+            pc->vres.val = pc->v1.val | pc->v2.val;
+            break;
         default: assert(0);
         }
         setFlagsOnLogicResult(es, pc->vres.val, pc->v1.type);
@@ -3027,6 +2988,7 @@ void processInstr(RContext* rc, Instr* instr)
         case IT_INC:
             captureUnaryOp(rc, instr, es, 0);
             break;
+        case IT_TEST:
         case IT_AND:
         case IT_OR:
         case IT_XOR:
@@ -3055,6 +3017,9 @@ void processInstr(RContext* rc, Instr* instr)
         switch(pc.outOpCount) {
         case 1:
             setOpState(ms, es, pc.out);
+            break;
+        case 0:
+            // IT_TEST has no output value
             break;
         default:
             assert(0);
@@ -3087,7 +3052,9 @@ void processInstr(RContext* rc, Instr* instr)
         setOpValue(&(pc.vres), es, pc.out);
         setOpState(pc.vres.state, es, pc.out);
         break;
-
+    case 0:
+        // IT_TEST has no output value
+        break;
     default:
         assert(0);
     }
