@@ -1432,7 +1432,7 @@ bool opStateIsTracked(EmuState* es, Operand* o)
 
     getOpAddr(&addr, es, o);
     isOnStack = getStackOffset(es, &addr, &off);
-    if (!isOnStack) return 0;
+    if (!isOnStack) return false;
     return msIsStatic(off.state);
 }
 
@@ -1472,10 +1472,10 @@ void captureMov(RContext* c, Instr* orig, EmuState* es, EmuValue* res)
 
     // data movement from orig->src to orig->dst, value is res
 
-    if (res->state.cState == CS_DEAD) return;
+    if (res && (res->state.cState == CS_DEAD)) return;
 
     o = &(orig->src);
-    if (msIsStatic(res->state)) {
+    if (res && msIsStatic(res->state)) {
         // no need to update data if capture state is maintained
         if (opStateIsTracked(es, &(orig->dst))) return;
 
@@ -2438,83 +2438,6 @@ void emulateInstrAndState(ProcessingContext* pc)
         break;
     }
 
-    case IT_MOV:
-    case IT_MOVSX: { // converting move
-        ValType dst_t = opValType(&(instr->dst));
-        getOpValue(&vres, es, &(instr->src));
-
-        switch(instr->src.type) {
-        case OT_Reg8:
-        case OT_Ind8:
-        case OT_Imm8:
-            switch (dst_t) {
-            case VT_8:
-                break;
-            case VT_16:
-                vres.val = (int16_t) (int8_t) vres.val;
-                vres.type = VT_16;
-                break;
-            case VT_32:
-                vres.val = (int32_t) (int8_t) vres.val;
-                vres.type = VT_32;
-                break;
-            case VT_64:
-                vres.val = (int64_t) (int8_t) vres.val;
-                vres.type = VT_64;
-                break;
-            default:
-                assert(0);
-            }
-            break;
-
-        case OT_Reg16:
-        case OT_Ind16:
-        case OT_Imm16:
-            switch (dst_t) {
-            case VT_16:
-                break;
-            case VT_32:
-                vres.val = (int32_t) (int16_t) vres.val;
-                vres.type = VT_32;
-                break;
-            case VT_64:
-                vres.val = (int64_t) (int16_t) vres.val;
-                vres.type = VT_64;
-                break;
-            default:
-                assert(0);
-            }
-            break;
-
-        case OT_Reg32:
-        case OT_Ind32:
-        case OT_Imm32:
-            assert(dst_t == VT_32 || dst_t == VT_64);
-            if (dst_t == VT_64) {
-                // also a regular mov may sign-extend: imm32->64
-                // assert(instr->type == IT_MOVSX);
-                // sign extend lower 32 bit to 64 bit
-                vres.val = (int64_t) (int32_t) vres.val;
-                vres.type = VT_64;
-            }
-            break;
-
-        case OT_Reg64:
-        case OT_Ind64:
-        case OT_Imm64:
-            assert(dst_t == VT_64);
-            break;
-
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-        captureMov(c, instr, es, &vres);
-        setOpValue(&vres, es, &(instr->dst));
-        setOpState(vres.state, es, &(instr->dst));
-        break;
-    }
-
     case IT_NOP:
         // nothing to do
         break;
@@ -2756,6 +2679,12 @@ void getInOutSemantic(ProcessingContext* c)
     c->out2 = 0;
 
     switch(instr->type) {
+    case IT_MOV:
+    case IT_MOVSX:
+        c->in  = &(instr->src);
+        c->out = &(instr->dst);
+        break;
+
     case IT_ADD:
     case IT_SUB:
         c->in  = &(instr->dst);
@@ -2868,6 +2797,63 @@ void emulateInstr(ProcessingContext* pc)
     Instr* instr = pc->instr;
 
     switch(instr->type) {
+    case IT_MOV:
+    case IT_MOVSX: { // converting move
+        ValType vt = opValType(pc->out);
+
+        pc->vres.type = vt;
+        switch(instr->src.type) {
+        case OT_Reg8:
+        case OT_Ind8:
+        case OT_Imm8:
+            // sign-extend 8 bit input if needed
+            switch (vt) {
+            case VT_8:  pc->vres.val = pc->v1.val; break;
+            case VT_16: pc->vres.val = (int16_t) (int8_t) pc->v1.val; break;
+            case VT_32: pc->vres.val = (int32_t) (int8_t) pc->v1.val; break;
+            case VT_64: pc->vres.val = (int64_t) (int8_t) pc->v1.val; break;
+            default: assert(0);
+            }
+            break;
+
+        case OT_Reg16:
+        case OT_Ind16:
+        case OT_Imm16:
+            // sign-extend 16 bit input if needed
+            switch (vt) {
+            case VT_16: pc->vres.val = pc->v1.val; break;
+            case VT_32: pc->vres.val = (int32_t) (int16_t) pc->v1.val; break;
+            case VT_64: pc->vres.val = (int64_t) (int16_t) pc->v1.val; break;
+            default: assert(0);
+            }
+            break;
+
+        case OT_Reg32:
+        case OT_Ind32:
+        case OT_Imm32:
+            // sign-extend 32 bit input if needed
+            switch (vt) {
+            case VT_32: pc->vres.val = pc->v1.val; break;
+            case VT_64: pc->vres.val = (int64_t) (int32_t) pc->v1.val; break;
+            default: assert(0);
+            }
+            break;
+
+        case OT_Reg64:
+        case OT_Ind64:
+        case OT_Imm64:
+            assert(vt == VT_64);
+            pc->vres.val = pc->v1.val; break;
+            break;
+
+        default:
+            setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
+            return;
+        }
+        break;
+    }
+
+
     case IT_ADD:
     case IT_SUB: {
         ValType vt = opValType(pc->out);
@@ -3030,7 +3016,7 @@ void processInstr(RContext* rc, Instr* instr)
         outputSet = true;
     }
 
-    if (cs == CS_DYNAMIC) {
+    if (!csIsStatic(cs)) {
         // some unknown input, just capture
         switch(instr->type) {
         case IT_CWTL:
@@ -3052,6 +3038,10 @@ void processInstr(RContext* rc, Instr* instr)
         case IT_SUB:
             captureBinaryOp(rc, instr, es, 0);
             break;
+        case IT_MOV:
+        case IT_MOVSX:
+            captureMov(rc, instr, es, 0);
+            break;
         default:
             assert(0);
         }
@@ -3061,7 +3051,7 @@ void processInstr(RContext* rc, Instr* instr)
         setFlagsState(es, pc.staticOutFlags, CS_STATIC);
 
         MetaState ms;
-        initMetaState(&ms, CS_DYNAMIC);
+        initMetaState(&ms, cs);
         switch(pc.outOpCount) {
         case 1:
             setOpState(ms, es, pc.out);
@@ -3069,7 +3059,10 @@ void processInstr(RContext* rc, Instr* instr)
         default:
             assert(0);
         }
-        return;
+        if (cs == CS_DYNAMIC)
+            return;
+
+        // for CS_STACKRELATIVE: also emulate
     }
 
     if (!outputSet) {
@@ -3078,12 +3071,17 @@ void processInstr(RContext* rc, Instr* instr)
         if (pc.rc->e) return;
     }
 
-    // TODO: config may want result to become dynamic
-    //       also if written to memory where state is not tracked
-
     // write output into emulation state (flag values already updated)
     switch(pc.outOpCount) {
     case 1:
+        if (!opStateIsTracked(es, pc.out)) {
+            // if result is known and goes to memory, generate imm store
+            Instr i;
+            initBinaryInstr(&i, IT_MOV, pc.vres.type,
+                            pc.out, getImmOp(pc.vres.type, pc.vres.val));
+            applyStaticToInd(&(i.dst), es);
+            capture(pc.rc, &i);
+        }
         initMetaState(&(pc.vres.state), cs);
         pc.vres.type = opValType(pc.out);
         setOpValue(&(pc.vres), es, pc.out);
