@@ -1318,6 +1318,23 @@ void getOpValue(EmuValue* v, EmuState* es, Operand* o)
         }
         return;
 
+    case OT_Reg128:
+    case OT_Reg256:
+    case OT_Reg512:
+        // we do not maintain state of vector registers for now: is unknown
+        assert(regIsV(o->reg));
+        // fall-through
+    case OT_Ind128:
+    case OT_Ind256:
+    case OT_Ind512:
+        // memory used as input for vector instructions becomes unknown
+        // FIXME: check that we do not access stack with maintained state
+        v->type = opValType(o);
+        v->val = 0; // does not matter
+        initMetaState(&v->state, CS_DYNAMIC);
+        return;
+
+
     default: assert(0);
     }
 }
@@ -1341,6 +1358,13 @@ void setOpState(MetaState ms, EmuState* es, Operand* o)
     case OT_Ind64:
         getOpAddr(&addr, es, o);
         setMemState(es, &addr, opValType(o), ms, 0);
+        return;
+
+    case OT_Reg128:
+    case OT_Reg256:
+    case OT_Reg512:
+        // vector register state cannot be set to anything but unknown
+        assert(ms.cState == CS_DYNAMIC);
         return;
 
     default: assert(0);
@@ -1401,7 +1425,9 @@ bool opStateIsTracked(EmuState* es, Operand* o)
 
     // never should be called with immediate ops (do not point to location)
     assert(!opIsImm(o));
-    if (opIsGPReg(o)) return 1;
+    if (opIsGPReg(o)) return true;
+    // vector register state not maintained for now
+    if (opIsVReg(o)) return false;
 
     getOpAddr(&addr, es, o);
     isOnStack = getStackOffset(es, &addr, &off);
@@ -1715,52 +1741,6 @@ void processPassThrough(Instr* i, EmuState* es)
 
     default: assert(0);
     }
-}
-
-static
-void captureVec(RContext* c, Instr* orig, EmuState* es)
-{
-    Instr i;
-    OperandEncoding oe = OE_None;
-
-    switch(orig->type) {
-    case IT_ADDSS:
-    case IT_ADDSD:
-    case IT_ADDPS:
-    case IT_ADDPD:
-        oe = OE_RM;
-        break;
-    default: assert(0);
-    }
-
-    // we need to apply static information to memory addressing
-
-    initSimpleInstr(&i, orig->type);
-    i.vtype  = orig->vtype;
-    i.form   = orig->form;
-
-    switch(oe) {
-    case OE_MR:
-        assert(opIsReg(&(orig->dst)) || opIsInd(&(orig->dst)));
-        assert(opIsReg(&(orig->src)));
-
-        copyOperand( &(i.dst), &(orig->dst));
-        copyOperand( &(i.src), &(orig->src));
-        applyStaticToInd(&(i.dst), es);
-        break;
-
-    case OE_RM:
-        assert(opIsReg(&(orig->src)) || opIsInd(&(orig->src)));
-        assert(opIsReg(&(orig->dst)));
-
-        copyOperand( &(i.dst), &(orig->dst));
-        copyOperand( &(i.src), &(orig->src));
-        applyStaticToInd(&(i.src), es);
-        break;
-
-    default: assert(0);
-    }
-    capture(c, &i);
 }
 
 
@@ -2569,14 +2549,6 @@ void emulateInstrAndState(ProcessingContext* pc)
         setOpState(vres.state, es, &(instr->dst));
         break;
 
-    case IT_ADDSS:
-    case IT_ADDSD:
-    case IT_ADDPS:
-    case IT_ADDPD:
-        // just always capture without emulation
-        captureVec(c, instr, es);
-        break;
-
     default:
         setEmulatorError(c, instr, ET_UnsupportedInstr, 0);
     }
@@ -2636,6 +2608,10 @@ void getInOutSemantic(ProcessingContext* c)
         c->out = &(instr->dst);
         break;
 
+    case IT_ADDSS:
+    case IT_ADDSD:
+    case IT_ADDPS:
+    case IT_ADDPD:
     case IT_ADD:
     case IT_SUB:
         c->in  = &(instr->dst);
@@ -2984,10 +2960,12 @@ void processInstr(RContext* rc, Instr* instr)
         case IT_CLTQ:
             capture(rc, instr);
             break;
+
         case IT_DEC:
         case IT_INC:
             captureUnaryOp(rc, instr, es, 0);
             break;
+
         case IT_TEST:
         case IT_AND:
         case IT_OR:
@@ -2998,12 +2976,18 @@ void processInstr(RContext* rc, Instr* instr)
             // fall through
         case IT_ADD:
         case IT_SUB:
+        case IT_ADDSS:
+        case IT_ADDSD:
+        case IT_ADDPS:
+        case IT_ADDPD:
             captureBinaryOp(rc, instr, es, 0);
             break;
+
         case IT_MOV:
         case IT_MOVSX:
             captureMov(rc, instr, es, 0);
             break;
+
         default:
             assert(0);
         }
