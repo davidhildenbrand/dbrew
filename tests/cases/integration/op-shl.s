@@ -1,3 +1,4 @@
+//!args=--var
 .intel_syntax noprefix
     .text
     .globl  f1

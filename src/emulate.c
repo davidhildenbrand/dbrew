@@ -2488,67 +2488,6 @@ void emulateInstrAndState(ProcessingContext* pc)
         emulateRet(c, instr);
         break;
 
-    case IT_SHL:
-    case IT_SHR:
-    case IT_SAR:
-        // FIXME: do flags (shifting into CF, set OF)
-        getOpValue(&v1, es, &(instr->dst));
-        getOpValue(&v2, es, &(instr->src));
-
-        vt = opValType(&(instr->dst));
-        vres.type = vt;
-        cs = combineState(v1.state.cState, v2.state.cState, 0);
-        initMetaState(&(vres.state), cs);
-        switch(vt) {
-        case VT_8:
-            switch (instr->type) {
-            case IT_SHL: vres.val = (uint8_t) (v1.val << (v2.val & 7)); break;
-            case IT_SHR: vres.val = (uint8_t) (v1.val >> (v2.val & 7)); break;
-            case IT_SAR:
-                vres.val = (uint8_t) ((int8_t)v1.val >> (v2.val & 7)); break;
-            default: assert(0);
-            }
-            break;
-
-        case VT_16:
-            switch (instr->type) {
-            case IT_SHL: vres.val = (uint16_t) (v1.val << (v2.val & 15)); break;
-            case IT_SHR: vres.val = (uint16_t) (v1.val >> (v2.val & 15)); break;
-            case IT_SAR:
-                vres.val = (uint16_t) ((int16_t)v1.val >> (v2.val & 15)); break;
-            default: assert(0);
-            }
-            break;
-
-        case VT_32:
-            switch (instr->type) {
-            case IT_SHL: vres.val = (uint32_t) (v1.val << (v2.val & 31)); break;
-            case IT_SHR: vres.val = (uint32_t) (v1.val >> (v2.val & 31)); break;
-            case IT_SAR:
-                vres.val = (uint32_t) ((int32_t)v1.val >> (v2.val & 31)); break;
-            default: assert(0);
-            }
-            break;
-
-        case VT_64:
-            switch (instr->type) {
-            case IT_SHL: vres.val = v1.val << (v2.val & 63); break;
-            case IT_SHR: vres.val = v1.val >> (v2.val & 63); break;
-            case IT_SAR: vres.val = ((int64_t)v1.val >> (v2.val & 63)); break;
-            default: assert(0);
-            }
-            break;
-
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
-        }
-
-        captureBinaryOp(c, instr, es, &vres);
-        setOpValue(&vres, es, &(instr->dst));
-        setOpState(vres.state, es, &(instr->dst));
-        break;
-
     default:
         setEmulatorError(c, instr, ET_UnsupportedInstr, 0);
     }
@@ -2614,6 +2553,9 @@ void getInOutSemantic(ProcessingContext* c)
     case IT_ADDPD:
     case IT_ADD:
     case IT_SUB:
+    case IT_SHL:
+    case IT_SHR:
+    case IT_SAR:
         c->in  = &(instr->dst);
         c->in2 = &(instr->src);
         c->out = &(instr->dst);
@@ -2713,6 +2655,80 @@ bool isStaticDueToInput(ProcessingContext* c)
         break;
     }
     return false;
+}
+
+// FIXME: flags not implemented (shifting into CF, set ZSOP)
+static
+void emulateShift(ProcessingContext* pc)
+{
+    Instr* instr = pc->instr;
+    ValType vt = opValType(pc->out);
+
+    switch(vt) {
+    case VT_8:
+        switch (instr->type) {
+        case IT_SHL:
+            pc->vres.val = (uint8_t) (pc->v1.val << (pc->v2.val & 7));
+            break;
+        case IT_SHR:
+            pc->vres.val = (uint8_t) (pc->v1.val >> (pc->v2.val & 7));
+            break;
+        case IT_SAR:
+            pc->vres.val = (uint8_t) ((int8_t)pc->v1.val >> (pc->v2.val & 7));
+            break;
+        default: assert(0);
+        }
+        break;
+
+    case VT_16:
+        switch (instr->type) {
+        case IT_SHL:
+            pc->vres.val = (uint16_t) (pc->v1.val << (pc->v2.val & 15));
+            break;
+        case IT_SHR:
+            pc->vres.val = (uint16_t) (pc->v1.val >> (pc->v2.val & 15));
+            break;
+        case IT_SAR:
+            pc->vres.val = (uint16_t) ((int16_t)pc->v1.val >> (pc->v2.val & 15));
+            break;
+        default: assert(0);
+        }
+        break;
+
+    case VT_32:
+        switch (instr->type) {
+        case IT_SHL:
+            pc->vres.val = (uint32_t) (pc->v1.val << (pc->v2.val & 31));
+            break;
+        case IT_SHR:
+            pc->vres.val = (uint32_t) (pc->v1.val >> (pc->v2.val & 31));
+            break;
+        case IT_SAR:
+            pc->vres.val = (uint32_t) ((int32_t)pc->v1.val >> (pc->v2.val & 31));
+            break;
+        default: assert(0);
+        }
+        break;
+
+    case VT_64:
+        switch (instr->type) {
+        case IT_SHL:
+            pc->vres.val = pc->v1.val << (pc->v2.val & 63);
+            break;
+        case IT_SHR:
+            pc->vres.val = pc->v1.val >> (pc->v2.val & 63);
+            break;
+        case IT_SAR:
+            pc->vres.val = ((int64_t)pc->v1.val >> (pc->v2.val & 63));
+            break;
+        default: assert(0);
+        }
+        break;
+
+    default:
+        setEmulatorError(pc->rc, instr, ET_UnsupportedOperands, 0);
+        break;
+    }
 }
 
 // emulate an instruction
@@ -2889,6 +2905,12 @@ void emulateInstr(ProcessingContext* pc)
         setFlagsOnLogicResult(es, pc->vres.val, pc->v1.type);
         break;
 
+    case IT_SHL:
+    case IT_SHR:
+    case IT_SAR:
+        emulateShift(pc);
+        break;
+
     default:
         setEmulatorError(pc->rc, instr, ET_UnsupportedInstr, 0);
     }
@@ -2976,6 +2998,9 @@ void processInstr(RContext* rc, Instr* instr)
             // fall through
         case IT_ADD:
         case IT_SUB:
+        case IT_SHL:
+        case IT_SHR:
+        case IT_SAR:
         case IT_ADDSS:
         case IT_ADDSD:
         case IT_ADDPS:
