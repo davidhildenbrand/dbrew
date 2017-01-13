@@ -1300,6 +1300,7 @@ void getOpValue(EmuValue* v, EmuState* es, Operand* o)
         return;
 
     case OT_Ind8:
+    case OT_Ind16:
     case OT_Ind32:
     case OT_Ind64:
         if (o->seg != OSO_None) {
@@ -1354,6 +1355,7 @@ void setOpState(MetaState ms, EmuState* es, Operand* o)
         es->reg_state[o->reg.ri] = ms;
         return;
 
+    case OT_Ind16:
     case OT_Ind32:
     case OT_Ind64:
         getOpAddr(&addr, es, o);
@@ -1403,6 +1405,7 @@ void setOpValue(EmuValue* v, EmuState* es, Operand* o)
         es->reg[o->reg.ri] = v->val;
         return;
 
+    case OT_Ind16:
     case OT_Ind32:
     case OT_Ind64:
         getOpAddr(&addr, es, o);
@@ -1897,16 +1900,24 @@ void emulateRet(RContext* c, Instr* instr)
     if (es->depth >= 0) {
         EmuValue v, addr;
 
-        // pop return address from stack
+
         addr = emuValue(es->reg[RI_SP], VT_64, es->reg_state[RI_SP]);
         getMemValue(&v, &addr, es, VT_64, 1);
-        es->reg[RI_SP] += 8;
 
         if (v.val != es->ret_stack[es->depth]) {
             setEmulatorError(c, instr,
                              ET_BadOperands, "Return address modified");
             return;
         }
+
+        // adjust rsp: add rsp,8
+        Instr i;
+        initBinaryInstr(&i, IT_ADD, VT_None,
+                        getRegOp(getReg(RT_GP64, RI_SP)), // dst
+                        getImmOp(VT_64, 8));
+        processInstr(c, &i);
+        if (c->e) return; // error
+
         // return to address
         c->exit = es->ret_stack[es->depth];
     }
@@ -1942,7 +1953,7 @@ typedef struct _ProcessingContext {
 static
 void emulateInstrAndState(ProcessingContext* pc)
 {
-    EmuValue vres, v1, v2, addr;
+    EmuValue vres, v1, v2;
     CaptureState cs;
     ValType vt;
 
@@ -2406,86 +2417,84 @@ void emulateInstrAndState(ProcessingContext* pc)
         break;
 
 
-    case IT_POP:
+    case IT_POP: {
+        // substitute with 2 instructions
         switch(instr->dst.type) {
-        case OT_Reg16:
-            addr = emuValue(es->reg[RI_SP], VT_64, es->reg_state[RI_SP]);
-            getMemValue(&v1, &addr, es, VT_16, 1);
-            setOpValue(&v1, es, &(instr->dst));
-            setOpState(v1.state, es, &(instr->dst));
-            es->reg[RI_SP] += 2;
-            if (!msIsStatic(v1.state))
-                capture(c, instr);
-            break;
-
-        case OT_Reg64:
-            addr = emuValue(es->reg[RI_SP], VT_64, es->reg_state[RI_SP]);
-            getMemValue(&v1, &addr, es, VT_64, 1);
-            setOpValue(&v1, es, &(instr->dst));
-            setOpState(v1.state, es, &(instr->dst));
-            es->reg[RI_SP] += 8;
-            if (!msIsStatic(v1.state))
-                capture(c, instr);
-            break;
-
+        case OT_Reg16: vt = VT_16; break;
+        case OT_Reg64: vt = VT_64; break;
         default:
             setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
             return;
         }
-        break;
 
-    case IT_PUSH:
+        Instr i;
+        // mov reg-op, [rsp]
+        initBinaryInstr(&i, IT_MOV, VT_None,
+                        &(instr->dst), // dst
+                        getIndRegOp(vt, getReg(VT_64, RI_SP)));
+        processInstr(c, &i);
+        if (c->e) return; // error
+
+        // add rsp,2/8
+        initBinaryInstr(&i, IT_ADD, VT_None,
+                        getRegOp(getReg(RT_GP64, RI_SP)), // dst
+                        getImmOp(VT_64, (vt == VT_16) ? 2:8) );
+        processInstr(c, &i);
+        if (c->e) return; // error
+        break;
+    }
+
+    case IT_PUSH: {
+        // substitute with 2 instructions: sub rsp,2/8 / mov [rsp], op
+        // operands of sub-instr may have different known/unknown state
+        // TODO: post-processing step re-merging instr pair if possible?
+
+        Operand* op = &(instr->dst);
+        Operand o;
+
         switch(instr->dst.type) {
         case OT_Ind16:
         case OT_Reg16:
         case OT_Imm16:
-            es->reg[RI_SP] -= 2;
-            addr = emuValue(es->reg[RI_SP], VT_64, es->reg_state[RI_SP]);
-            getOpValue(&vres, es, &(instr->dst));
-            setMemValue(&vres, &addr, es, VT_16, 1);
-            setMemState(es, &addr, VT_16, vres.state, 1);
-            if (!msIsStatic(vres.state))
-                capture(c, instr);
-            break;
-
         case OT_Ind64:
         case OT_Reg64:
         case OT_Imm64:
-        case OT_Imm8:
-        case OT_Imm32:
-            es->reg[RI_SP] -= 8;
-            addr = emuValue(es->reg[RI_SP], VT_64, es->reg_state[RI_SP]);
-            getOpValue(&vres, es, &(instr->dst));
-
-            // Sign-extend 8-bit and 32-bit immediate values to 64-bit
-            switch(vres.type) {
-            case VT_8:
-                vres.val = (int64_t) (int8_t) vres.val;
-                break;
-            case VT_32:
-                vres.val = (int64_t) (int32_t) vres.val;
-                break;
-            case VT_64:
-                break;
-            default:
-                assert(0);
-            }
-
-            vres.type = VT_64;
-            setMemValue(&vres, &addr, es, VT_64, 1);
-            setMemState(es, &addr, VT_64, vres.state, 1);
-            if (!msIsStatic(vres.state))
-                capture(c, instr);
             break;
-
+        case OT_Imm8:
+            // sign-extend to 64 bit
+            copyOperand(&o, getImmOp(VT_64, (int64_t) (int8_t) instr->dst.val));
+            op = &o;
+            break;
+        case OT_Imm32:
+            // sign-extend to 64 bit
+            copyOperand(&o, getImmOp(VT_64, (int64_t) (int32_t) instr->dst.val));
+            op = &o;
+            break;
         default:
             setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
             return;
         }
+
+        Instr i;
+        // sub rsp,2/8
+        initBinaryInstr(&i, IT_SUB, VT_None,
+                        getRegOp(getReg(RT_GP64, RI_SP)), // dst
+                        getImmOp(VT_64, (opValType(op) == VT_16) ? 2:8) );
+        processInstr(c, &i);
+        if (c->e) return; // error
+
+        // mov [rsp], op
+        initBinaryInstr(&i, IT_MOV, VT_None,
+                        getIndRegOp(opValType(op), getReg(VT_64, RI_SP)), // dst
+                        op);
+        processInstr(c, &i);
+        if (c->e) return; // error
+
         break;
+    }
 
     case IT_RET:
-        emulateRet(c, instr);
+        emulateRet(c, instr); // may set error
         break;
 
     default:

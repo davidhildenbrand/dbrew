@@ -312,8 +312,10 @@ OpType getImmOpType(ValType t);
 OpType getGPRegOpType(ValType t);
 
 void setRegOp(Operand* o, Reg r);
-Operand* getRegOp(Reg r);      // returns pointer to static object
-Operand* getImmOp(ValType t, uint64_t v); // returns pointer to static object
+// warning: following 3 helpers return pointer to static object
+Operand* getRegOp(Reg r);
+Operand* getImmOp(ValType t, uint64_t v);
+Operand* getIndRegOp(ValType t, Reg r);
 
 void copyOperand(Operand* dst, Operand* src);
 void opOverwriteType(Operand* o, ValType vt);

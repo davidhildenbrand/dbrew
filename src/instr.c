@@ -426,6 +426,25 @@ Operand* getImmOp(ValType t, uint64_t v)
     return &o;
 }
 
+Operand* getIndRegOp(ValType t, Reg r)
+{
+    static Operand o;
+
+    switch(t) {
+    case VT_8:  o.type = OT_Ind8; break;
+    case VT_16: o.type = OT_Ind16; break;
+    case VT_32: o.type = OT_Ind32; break;
+    case VT_64: o.type = OT_Ind64; break;
+    default: assert(0);
+    }
+
+    o.seg = OSO_None;
+    o.reg = r;
+    o.val = 0;
+    o.scale = 0;
+
+    return &o;
+}
 
 void copyOperand(Operand* dst, Operand* src)
 {

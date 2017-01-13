@@ -13,31 +13,37 @@ Decoding BB test ...
               test+7:  c9                    leave  
               test+8:  c3                    ret    
 Emulate 'test: push %rbp'
-Capture 'push %rbp' (into test|0 + 1)
+Capture 'sub $0x8,%rsp' (into test|0 + 1)
+Capture 'mov %rbp,(%rsp)' (into test|0 + 2)
 Emulate 'test+1: mov %rsp,%rbp'
-Capture 'mov %rsp,%rbp' (into test|0 + 2)
+Capture 'mov %rsp,%rbp' (into test|0 + 3)
 Emulate 'test+4: mov %rdi,%rax'
 Emulate 'test+7: leave'
-Capture 'mov %rbp,%rsp' (into test|0 + 3)
-Capture 'pop %rbp' (into test|0 + 4)
+Capture 'mov %rbp,%rsp' (into test|0 + 4)
+Capture 'mov (%rsp),%rbp' (into test|0 + 5)
+Capture 'add $0x8,%rsp' (into test|0 + 6)
 Emulate 'test+8: ret'
-Capture 'H-ret' (into test|0 + 5)
-Capture 'mov $0x1,%rax' (into test|0 + 6)
-Capture 'ret' (into test|0 + 7)
-Generating code for BB test|0 (8 instructions)
+Capture 'H-ret' (into test|0 + 7)
+Capture 'mov $0x1,%rax' (into test|0 + 8)
+Capture 'ret' (into test|0 + 9)
+Generating code for BB test|0 (10 instructions)
   I 0 : H-call                           (test|0)+0   
-  I 1 : push    %rbp                     (test|0)+0    55
-  I 2 : mov     %rsp,%rbp                (test|0)+1    48 89 e5
-  I 3 : mov     %rbp,%rsp                (test|0)+4    48 89 ec
-  I 4 : pop     %rbp                     (test|0)+7    5d
-  I 5 : H-ret                            (test|0)+8   
-  I 6 : mov     $0x1,%rax                (test|0)+8    48 c7 c0 01 00 00 00
-  I 7 : ret                              (test|0)+15   c3
-Generated: 16 bytes (pass1: 42)
-BB gen (6 instructions):
-                 gen:  55                    push    %rbp
-               gen+1:  48 89 e5              mov     %rsp,%rbp
-               gen+4:  48 89 ec              mov     %rbp,%rsp
-               gen+7:  5d                    pop     %rbp
-               gen+8:  48 c7 c0 01 00 00 00  mov     $0x1,%rax
-              gen+15:  c3                    ret    
+  I 1 : sub     $0x8,%rsp                (test|0)+0    48 83 ec 08
+  I 2 : mov     %rbp,(%rsp)              (test|0)+4    48 89 2c 24
+  I 3 : mov     %rsp,%rbp                (test|0)+8    48 89 e5
+  I 4 : mov     %rbp,%rsp                (test|0)+11   48 89 ec
+  I 5 : mov     (%rsp),%rbp              (test|0)+14   48 8b 2c 24
+  I 6 : add     $0x8,%rsp                (test|0)+18   48 83 c4 08
+  I 7 : H-ret                            (test|0)+22  
+  I 8 : mov     $0x1,%rax                (test|0)+22   48 c7 c0 01 00 00 00
+  I 9 : ret                              (test|0)+29   c3
+Generated: 30 bytes (pass1: 56)
+BB gen (8 instructions):
+                 gen:  48 83 ec 08           sub     $0x8,%rsp
+               gen+4:  48 89 2c 24           mov     %rbp,(%rsp)
+               gen+8:  48 89 e5              mov     %rsp,%rbp
+              gen+11:  48 89 ec              mov     %rbp,%rsp
+              gen+14:  48 8b 2c 24           mov     (%rsp),%rbp
+              gen+18:  48 83 c4 08           add     $0x8,%rsp
+              gen+22:  48 c7 c0 01 00 00 00  mov     $0x1,%rax
+              gen+29:  c3                    ret    

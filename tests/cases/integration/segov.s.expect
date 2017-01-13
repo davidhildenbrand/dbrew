@@ -21,51 +21,57 @@ Decoding BB test ...
              test+33:  5d                    pop     %rbp
              test+34:  c3                    ret    
 Emulate 'test: push %rbp'
-Capture 'push %rbp' (into test|0 + 1)
+Capture 'sub $0x8,%rsp' (into test|0 + 1)
+Capture 'mov %rbp,(%rsp)' (into test|0 + 2)
 Emulate 'test+1: mov %rsp,%rbp'
-Capture 'mov %rsp,%rbp' (into test|0 + 2)
+Capture 'mov %rsp,%rbp' (into test|0 + 3)
 Emulate 'test+4: mov %edi,-0x4(%rbp)'
 Emulate 'test+7: mov %fs:-0x8,%rax'
-Capture 'mov %fs:-0x8,%rax' (into test|0 + 3)
+Capture 'mov %fs:-0x8,%rax' (into test|0 + 4)
 Emulate 'test+16: mov %eax,%edx'
-Capture 'mov %eax,%edx' (into test|0 + 4)
+Capture 'mov %eax,%edx' (into test|0 + 5)
 Emulate 'test+18: mov %fs:-0x10,%eax'
-Capture 'mov %fs:-0x10,%eax' (into test|0 + 5)
+Capture 'mov %fs:-0x10,%eax' (into test|0 + 6)
 Emulate 'test+26: add %eax,%edx'
-Capture 'add %eax,%edx' (into test|0 + 6)
+Capture 'add %eax,%edx' (into test|0 + 7)
 Emulate 'test+28: mov -0x4(%rbp),%eax'
 Emulate 'test+31: add %edx,%eax'
-Capture 'mov $0x1,%eax' (into test|0 + 7)
-Capture 'add %edx,%eax' (into test|0 + 8)
+Capture 'mov $0x1,%eax' (into test|0 + 8)
+Capture 'add %edx,%eax' (into test|0 + 9)
 Emulate 'test+33: pop %rbp'
-Capture 'pop %rbp' (into test|0 + 9)
+Capture 'mov (%rsp),%rbp' (into test|0 + 10)
+Capture 'add $0x8,%rsp' (into test|0 + 11)
 Emulate 'test+34: ret'
-Capture 'H-ret' (into test|0 + 10)
-Capture 'ret' (into test|0 + 11)
-Generating code for BB test|0 (12 instructions)
+Capture 'H-ret' (into test|0 + 12)
+Capture 'ret' (into test|0 + 13)
+Generating code for BB test|0 (14 instructions)
   I 0 : H-call                           (test|0)+0   
-  I 1 : push    %rbp                     (test|0)+0    55
-  I 2 : mov     %rsp,%rbp                (test|0)+1    48 89 e5
-  I 3 : mov     %fs:-0x8,%rax            (test|0)+4    64 48 8b 04 25 f8 ff ff ff
-  I 4 : mov     %eax,%edx                (test|0)+13   89 c2
-  I 5 : mov     %fs:-0x10,%eax           (test|0)+15   64 8b 04 25 f0 ff ff ff
-  I 6 : add     %eax,%edx                (test|0)+23   01 c2
-  I 7 : mov     $0x1,%eax                (test|0)+25   c7 c0 01 00 00 00
-  I 8 : add     %edx,%eax                (test|0)+31   01 d0
-  I 9 : pop     %rbp                     (test|0)+33   5d
-  I10 : H-ret                            (test|0)+34  
-  I11 : ret                              (test|0)+34   c3
-Generated: 35 bytes (pass1: 61)
-BB gen (10 instructions):
-                 gen:  55                    push    %rbp
-               gen+1:  48 89 e5              mov     %rsp,%rbp
-               gen+4:  64 48 8b 04 25 f8 ff  mov     %fs:-0x8,%rax
-              gen+11:  ff ff               
-              gen+13:  89 c2                 mov     %eax,%edx
-              gen+15:  64 8b 04 25 f0 ff ff  mov     %fs:-0x10,%eax
-              gen+22:  ff                  
-              gen+23:  01 c2                 add     %eax,%edx
-              gen+25:  c7 c0 01 00 00 00     mov     $0x1,%eax
-              gen+31:  01 d0                 add     %edx,%eax
-              gen+33:  5d                    pop     %rbp
-              gen+34:  c3                    ret    
+  I 1 : sub     $0x8,%rsp                (test|0)+0    48 83 ec 08
+  I 2 : mov     %rbp,(%rsp)              (test|0)+4    48 89 2c 24
+  I 3 : mov     %rsp,%rbp                (test|0)+8    48 89 e5
+  I 4 : mov     %fs:-0x8,%rax            (test|0)+11   64 48 8b 04 25 f8 ff ff ff
+  I 5 : mov     %eax,%edx                (test|0)+20   89 c2
+  I 6 : mov     %fs:-0x10,%eax           (test|0)+22   64 8b 04 25 f0 ff ff ff
+  I 7 : add     %eax,%edx                (test|0)+30   01 c2
+  I 8 : mov     $0x1,%eax                (test|0)+32   c7 c0 01 00 00 00
+  I 9 : add     %edx,%eax                (test|0)+38   01 d0
+  I10 : mov     (%rsp),%rbp              (test|0)+40   48 8b 2c 24
+  I11 : add     $0x8,%rsp                (test|0)+44   48 83 c4 08
+  I12 : H-ret                            (test|0)+48  
+  I13 : ret                              (test|0)+48   c3
+Generated: 49 bytes (pass1: 75)
+BB gen (12 instructions):
+                 gen:  48 83 ec 08           sub     $0x8,%rsp
+               gen+4:  48 89 2c 24           mov     %rbp,(%rsp)
+               gen+8:  48 89 e5              mov     %rsp,%rbp
+              gen+11:  64 48 8b 04 25 f8 ff  mov     %fs:-0x8,%rax
+              gen+18:  ff ff               
+              gen+20:  89 c2                 mov     %eax,%edx
+              gen+22:  64 8b 04 25 f0 ff ff  mov     %fs:-0x10,%eax
+              gen+29:  ff                  
+              gen+30:  01 c2                 add     %eax,%edx
+              gen+32:  c7 c0 01 00 00 00     mov     $0x1,%eax
+              gen+38:  01 d0                 add     %edx,%eax
+              gen+40:  48 8b 2c 24           mov     (%rsp),%rbp
+              gen+44:  48 83 c4 08           add     $0x8,%rsp
+              gen+48:  c3                    ret    

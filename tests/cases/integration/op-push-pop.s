@@ -1,3 +1,4 @@
+//!args=--run
         .intel_syntax noprefix
         .text
         .globl  f1
@@ -12,6 +13,8 @@ f1:
         movq    rbx, 0xDDDDDDDDDDDD # clang assembler needs q postfix
         push    rbx
         pop     r9
+	xor     rdx,rdx
+	xor     rcx,rcx
         pop     dx
         pop     cx
         pop     r10
