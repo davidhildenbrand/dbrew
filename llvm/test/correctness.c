@@ -17,9 +17,15 @@
  * along with DBrew.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
+#include <sys/mman.h>
 
 #include <glib.h>
 
@@ -27,11 +33,23 @@
 #include <dbrew-llvm.h>
 
 
+#define MMAP_ADDR1 0x100000000
+#define MMAP_ADDR2 0x200000000
+
+enum TestFlags {
+    /**
+     * Maps memory at address MMAP_ADDR1 (all-zero) and MMAP_ADDR2 (all-ones).
+     **/
+    FLAG_MMAP = (1 << 0),
+};
+
+typedef enum TestFlags TestFlags;
+
 struct TestFunction {
     const char* caseName;
     void(* function)(void);
     size_t signature;
-    size_t flags;
+    TestFlags flags;
 };
 
 typedef struct TestFunction TestFunction;
@@ -66,6 +84,20 @@ test_compare_output(gconstpointer userdata)
     *((void**) &fn) = ll_function_get_pointer(function, engine);
 
     size_t repetitions = 100;
+
+    if (testFunc->flags & FLAG_MMAP)
+    {
+        void* addr1 = mmap((void*) MMAP_ADDR1, 0x1000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+        void* addr2 = mmap((void*) MMAP_ADDR2, 0x1000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+
+        g_assert(addr1 == (void*) MMAP_ADDR1);
+        g_assert(addr2 == (void*) MMAP_ADDR2);
+
+        memset(addr2, 0xff, 0x1000);
+
+        mprotect(addr1, 0x1000, PROT_READ);
+        mprotect(addr2, 0x1000, PROT_READ);
+    }
 
     switch (testFunc->signature)
     {
@@ -148,6 +180,12 @@ test_compare_output(gconstpointer userdata)
             break;
         default:
             g_assert_not_reached();
+    }
+
+    if (testFunc->flags & FLAG_MMAP)
+    {
+        munmap((void*) MMAP_ADDR1, 0x1000);
+        munmap((void*) MMAP_ADDR2, 0x1000);
     }
 
     ll_engine_dispose(engine);

@@ -398,7 +398,7 @@ ll_get_global_offset(LLVMValueRef constGlobal, LLVMTypeRef pointerType, LLState*
     }
 
     uintptr_t offset = ptr - state->globalOffsetBase;
-    LLVMValueRef llvmOffset = LLVMConstInt(LLVMInt32TypeInContext(state->context), offset, false);
+    LLVMValueRef llvmOffset = LLVMConstInt(LLVMInt64TypeInContext(state->context), offset, false);
     LLVMValueRef pointer = LLVMBuildGEP(state->builder, state->globalBase, &llvmOffset, 1, "");
 
     return LLVMBuildPointerCast(state->builder, pointer, pointerType, "");

@@ -113,3 +113,19 @@ TEST_CASE("/operands/reg/ptr", 0221, 0,
     add rsp, 8;
     ret;
 )
+
+
+// Test cases for constant memory addresses.
+
+TEST_CASE("/operands/memconst/near", 020, 0,
+    mov rax, [rip + 1f];
+    ret;
+1:  .quad 0xabcdef0012345678;
+)
+TEST_CASE("/operands/memconst/far", 020, FLAG_MMAP,
+    mov rdx, MMAP_ADDR1;
+    mov rax, [rdx];
+    mov rdx, MMAP_ADDR2;
+    sub rax, [rdx];
+    ret;
+)
