@@ -123,9 +123,9 @@ TEST_CASE("/operands/memconst/near", 020, 0,
 1:  .quad 0xabcdef0012345678;
 )
 TEST_CASE("/operands/memconst/far", 020, FLAG_MMAP,
-    mov rdx, MMAP_ADDR1;
+    movabs rdx, MMAP_ADDR1;
     mov rax, [rdx];
-    mov rdx, MMAP_ADDR2;
+    movabs rdx, MMAP_ADDR2;
     sub rax, [rdx];
     ret;
 )
