@@ -378,22 +378,22 @@ ll_operand_store_vreg(LLVMValueRef value, OperandDataType dataType, Operand* ope
  * \author Alexis Engelke
  *
  * \param constGlobal The constant global address
- * \param pointerType The type of the pointer
  * \param state The module state
  * \returns A pointer of the given type which represents the address
  **/
 static LLVMValueRef
-ll_get_global_offset(LLVMValueRef constGlobal, LLVMTypeRef pointerType, LLState* state)
+ll_get_const_pointer(uintptr_t ptr, LLState* state)
 {
-    uintptr_t ptr = LLVMConstIntGetZExtValue(constGlobal);
+    LLVMTypeRef i8 = LLVMInt8TypeInContext(state->context);
+    LLVMTypeRef pi8 = LLVMPointerType(i8, 0);
 
     if (ptr == 0)
-        return LLVMConstPointerNull(pointerType);
+        return LLVMConstPointerNull(pi8);
 
     if (state->globalOffsetBase == 0)
     {
         state->globalOffsetBase = ptr;
-        state->globalBase = LLVMAddGlobal(state->module, LLVMInt8TypeInContext(state->context), "__ll_global_base__");
+        state->globalBase = LLVMAddGlobal(state->module, i8, "__ll_global_base__");
         LLVMAddGlobalMapping(state->engine, state->globalBase, (void*) ptr);
     }
 
@@ -401,7 +401,7 @@ ll_get_global_offset(LLVMValueRef constGlobal, LLVMTypeRef pointerType, LLState*
     LLVMValueRef llvmOffset = LLVMConstInt(LLVMInt64TypeInContext(state->context), offset, false);
     LLVMValueRef pointer = LLVMBuildGEP(state->builder, state->globalBase, &llvmOffset, 1, "");
 
-    return LLVMBuildPointerCast(state->builder, pointer, pointerType, "");
+    return pointer;
 }
 
 /**
@@ -420,9 +420,7 @@ LLVMValueRef
 ll_operand_get_address(OperandDataType dataType, Operand* operand, LLState* state)
 {
     LLVMValueRef result;
-    LLVMTypeRef i8 = LLVMInt8TypeInContext(state->context);
     LLVMTypeRef i64 = LLVMInt64TypeInContext(state->context);
-    LLVMTypeRef pi8 = LLVMPointerType(i8, 0);
 
     LLVMTypeRef pointerType;
     int addrspace;
@@ -458,8 +456,8 @@ ll_operand_get_address(OperandDataType dataType, Operand* operand, LLState* stat
             if (!LLVMIsConstant(result))
                 warn_if_reached();
 
-            result = LLVMConstAdd(result, LLVMConstInt(i64, operand->val, false));
-            result = ll_get_global_offset(result, pi8, state);
+            uintptr_t constPtr = LLVMConstIntGetZExtValue(result);
+            result = ll_get_const_pointer(constPtr + operand->val, state);
         }
         else if (operand->val != 0)
         {
@@ -477,7 +475,7 @@ ll_operand_get_address(OperandDataType dataType, Operand* operand, LLState* stat
     }
     else
     {
-        result = ll_get_global_offset(LLVMConstInt(i64, operand->val, false), pi8, state);
+        result = ll_get_const_pointer(operand->val, state);
     }
 
     if (operand->scale != 0)
@@ -487,7 +485,7 @@ ll_operand_get_address(OperandDataType dataType, Operand* operand, LLState* stat
         if (LLVMIsNull(result))
         {
             // Fallback to inttoptr if this is definitly not-a-pointer.
-            // Therefore, we don't need to use ll_get_global_offset.
+            // Therefore, we don't need to use ll_get_const_pointer.
             offset = LLVMBuildMul(state->builder, offset, LLVMConstInt(i64, operand->scale, false), "");
             result = LLVMBuildIntToPtr(state->builder, offset, pointerType, "");
         }
