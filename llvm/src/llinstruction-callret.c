@@ -77,7 +77,7 @@ ll_instruction_call(Instr* instr, LLState* state)
         // warn_if_reached();
 
     LLVMValueRef llvmFunction = function->llvmFunction;
-    LLVMAddFunctionAttr(llvmFunction, LLVMInlineHintAttribute);
+    LLVMAddAttributeAtIndex(llvmFunction, -1, ll_support_get_enum_attr(state->context, "inlinehint"));
 
     // Construct arguments.
     LLVMTypeRef fnType = LLVMGetElementType(LLVMTypeOf(llvmFunction));

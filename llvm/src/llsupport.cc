@@ -74,6 +74,16 @@ ll_support_get_intrinsic(LLVMModuleRef module, LLSupportIntrinsics intrinsic, LL
     return llvm::wrap(llvm::Intrinsic::getDeclaration(llvm::unwrap(module), intrinsicId, Tys));
 }
 
+extern "C"
+LLVMAttributeRef
+ll_support_get_enum_attr(LLVMContextRef context, const char* name)
+{
+    unsigned len = strlen(name);
+    unsigned id = LLVMGetEnumAttributeKindForName(name, len);
+    assert(id != 0);
+    return LLVMCreateEnumAttribute(context, id, 0);
+}
+
 /**
  * Enable vectorization on a pass manager builder.
  *

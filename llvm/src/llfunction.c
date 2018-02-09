@@ -36,6 +36,7 @@
 #include <llcommon.h>
 #include <llcommon-internal.h>
 #include <lloperand-internal.h>
+#include <llsupport-internal.h>
 
 /**
  * \defgroup LLFunction Function
@@ -144,14 +145,11 @@ ll_function_declare_llvm(uint64_t packedType, const char* name, LLState* state)
 
     if (noaliasParams != 0)
     {
-        LLVMValueRef params = LLVMGetFirstParam(function);
-
+        LLVMAttributeRef noaliasAttr = ll_support_get_enum_attr(state->context, "noalias");
         for (size_t i = 0; i < paramCount; i++)
         {
             if (noaliasParams & (1 << i))
-                LLVMAddAttribute(params, LLVMNoAliasAttribute);
-
-            params = LLVMGetNextParam(params);
+                LLVMAddAttributeAtIndex(function, i + 1, noaliasAttr);
         }
     }
 
@@ -326,7 +324,7 @@ ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_
 
     // Add alwaysinline attribute such that the optimization routine inlines the
     // base function for the best results.
-    LLVMAddFunctionAttr(base->llvmFunction, LLVMAlwaysInlineAttribute);
+    LLVMAddAttributeAtIndex(base->llvmFunction, -1, ll_support_get_enum_attr(state->context, "alwaysinline"));
 
     if (index >= paramCount)
         warn_if_reached();
@@ -367,8 +365,9 @@ ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_
         else
             args[i] = params;
 
-        if (LLVMGetAttribute(baseParams) != 0)
-            LLVMAddAttribute(params, LLVMGetAttribute(baseParams));
+        // TODO: Copy parameter attributes
+        // if (LLVMGetAttribute(baseParams) != 0)
+        //     LLVMAddAttribute(params, LLVMGetAttribute(baseParams));
 
         params = LLVMGetNextParam(params);
         baseParams = LLVMGetNextParam(baseParams);
