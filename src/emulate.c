@@ -68,7 +68,7 @@ void initMetaState(MetaState* ms, CaptureState cs)
 static
 char captureState2Char(CaptureState cs)
 {
-    assert((cs >= 0) && (cs < CS_Max));
+    assert(cs < CS_Max);
     assert(CS_Max == 5);
     return "-DSR2"[cs];
 }
@@ -631,6 +631,7 @@ CBB* getCaptureBB(RContext* c, uint64_t f, int esID)
     bb->addr2 = 0;
     bb->genJcc8 = false;
     bb->genJump = false;
+    bb->generatorData = NULL;
 
     bb->generatorData = 0;
 
