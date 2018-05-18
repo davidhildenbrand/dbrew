@@ -28,9 +28,9 @@ CXXFLAGS=`$(LLVM_CONFIG) --cppflags` -O2 -g -std=c++11 -Iinclude $(WFLAGS_CXX)
 LDFLAGS = `$(LLVM_CONFIG) --ldflags` -g
 
 # TODO: Switch back to shared library. This is *so* slow and large...
-LLVM_MODULES = bitwriter core ipo mcjit scalaropts support vectorize x86codegen
-LDLIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` -lstdc++ -lm -lz -ldl -lpthread -ltinfo
-# `$(LLVM_CONFIG) --system-libs`
+#LLVM_MODULES = bitwriter core ipo mcjit scalaropts support vectorize x86codegen
+#LDLIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` -lstdc++ -lm -lz -ldl -lpthread -ltinfo
+LDLIBS=`$(LLVM_CONFIG) --system-libs --libs`
 # LDLIBS = -lLLVM-3.8
 
 SRCS_C = $(wildcard src/*.c)

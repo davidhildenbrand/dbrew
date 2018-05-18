@@ -99,7 +99,6 @@ void
 ll_support_pass_manager_builder_set_enable_vectorize(LLVMPassManagerBuilderRef PMB, LLVMBool value)
 {
     llvm::PassManagerBuilder* Builder = reinterpret_cast<llvm::PassManagerBuilder*>(PMB);
-    Builder->BBVectorize = value;
     Builder->SLPVectorize = value;
     Builder->LoopVectorize = value;
 }
