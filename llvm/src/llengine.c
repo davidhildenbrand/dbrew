@@ -208,6 +208,7 @@ ll_engine_optimize(LLState* state, int level)
     LLVMAddStripDeadPrototypesPass(pm);
 
     LLVMRunPassManager(pm, state->module);
+    LLVMRunPassManager(pm, state->module);
 
     LLVMDisposePassManager(pm);
 }

@@ -36,6 +36,7 @@
 #include <llflags-internal.h>
 #include <llfunction.h>
 #include <llfunction-internal.h>
+#include <llinstr-internal.h>
 #include <lloperand-internal.h>
 #include <llsupport-internal.h>
 
@@ -47,7 +48,7 @@
  **/
 
 void
-ll_instruction_movq(Instr* instr, LLState* state)
+ll_instruction_movq(LLInstr* instr, LLState* state)
 {
     OperandDataType type = instr->type == IT_MOVQ ? OP_SI64 : OP_SI32;
     LLVMValueRef operand1 = ll_operand_load(type, ALIGN_MAXIMUM, &instr->src, state);
@@ -59,7 +60,7 @@ ll_instruction_movq(Instr* instr, LLState* state)
 }
 
 void
-ll_instruction_movs(Instr* instr, LLState* state)
+ll_instruction_movs(LLInstr* instr, LLState* state)
 {
     OperandDataType type = instr->type == IT_MOVSS ? OP_SF32 : OP_SF64;
     LLVMValueRef operand1 = ll_operand_load(type, ALIGN_MAXIMUM, &instr->src, state);
@@ -71,7 +72,7 @@ ll_instruction_movs(Instr* instr, LLState* state)
 }
 
 void
-ll_instruction_movp(Instr* instr, LLState* state)
+ll_instruction_movp(LLInstr* instr, LLState* state)
 {
     Alignment alignment = instr->type == IT_MOVAPS || instr->type == IT_MOVAPD ? ALIGN_MAXIMUM : ALIGN_8;
     OperandDataType type = instr->type == IT_MOVAPS || instr->type == IT_MOVUPS ? OP_VF32 : OP_VF64;
@@ -81,7 +82,7 @@ ll_instruction_movp(Instr* instr, LLState* state)
 }
 
 void
-ll_instruction_movdq(Instr* instr, LLState* state)
+ll_instruction_movdq(LLInstr* instr, LLState* state)
 {
     Alignment alignment = instr->type == IT_MOVDQA ? ALIGN_MAXIMUM : ALIGN_8;
 
@@ -90,7 +91,7 @@ ll_instruction_movdq(Instr* instr, LLState* state)
 }
 
 void
-ll_instruction_movlp(Instr* instr, LLState* state)
+ll_instruction_movlp(LLInstr* instr, LLState* state)
 {
     OperandDataType type = instr->type == IT_MOVLPS ? OP_VF32 : OP_SF64;
 
@@ -103,7 +104,7 @@ ll_instruction_movlp(Instr* instr, LLState* state)
 }
 
 void
-ll_instruction_movhps(Instr* instr, LLState* state)
+ll_instruction_movhps(LLInstr* instr, LLState* state)
 {
     LLVMTypeRef i32 = LLVMInt32TypeInContext(state->context);
 
@@ -145,7 +146,7 @@ ll_instruction_movhps(Instr* instr, LLState* state)
 }
 
 void
-ll_instruction_movhpd(Instr* instr, LLState* state)
+ll_instruction_movhpd(LLInstr* instr, LLState* state)
 {
     LLVMTypeRef i32 = LLVMInt32TypeInContext(state->context);
 
@@ -173,7 +174,7 @@ ll_instruction_movhpd(Instr* instr, LLState* state)
 }
 
 void
-ll_instruction_unpckl(Instr* instr, LLState* state)
+ll_instruction_unpckl(LLInstr* instr, LLState* state)
 {
     LLVMTypeRef i32 = LLVMInt32TypeInContext(state->context);
     OperandDataType type = instr->type == IT_UNPCKLPS ? OP_VF32 : OP_VF64;

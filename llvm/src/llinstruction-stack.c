@@ -35,6 +35,7 @@
 #include <llcommon-internal.h>
 #include <llfunction.h>
 #include <llfunction-internal.h>
+#include <llinstr-internal.h>
 #include <lloperand-internal.h>
 #include <llsupport-internal.h>
 
@@ -71,7 +72,7 @@ ll_instruction_get_flags(bool fullSized, LLState* state)
 }
 
 void
-ll_instruction_stack(Instr* instr, LLState* state)
+ll_instruction_stack(LLInstr* instr, LLState* state)
 {
     LLVMTypeRef i8 = LLVMInt8TypeInContext(state->context);
     LLVMTypeRef i64 = LLVMInt64TypeInContext(state->context);

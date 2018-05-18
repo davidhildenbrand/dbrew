@@ -36,6 +36,7 @@
 #include <llcommon-internal.h>
 #include <llfunction.h>
 #include <llfunction-internal.h>
+#include <llinstr-internal.h>
 
 /**
  * \defgroup LLDecoder Decoder
@@ -77,7 +78,7 @@ ll_decode_basic_block_naive(uintptr_t address, DecodeFunc decodeFunc, void* user
     LLBasicBlock* bb = ll_basic_block_new_from_dbb(dbb);
     ll_function_add_basic_block(state->currentFunction, bb);
 
-    Instr* lastInstr = dbb->instr + dbb->count - 1;
+    LLInstr* lastInstr = dbb->instr + dbb->count - 1;
     InstrType type = lastInstr->type;
 
     LLBasicBlock* next = NULL;
@@ -153,7 +154,7 @@ ll_decode_basic_block_dedup(uintptr_t address, DecodeFunc decodeFunc, void* user
     LLBasicBlock* bb = ll_basic_block_new_from_dbb(dbb);
     ll_function_add_basic_block(state->currentFunction, bb);
 
-    Instr* lastInstr = dbb->instr + dbb->count - 1;
+    LLInstr* lastInstr = dbb->instr + dbb->count - 1;
     InstrType type = lastInstr->type;
 
     // In case the last instruction is already part of another BB.

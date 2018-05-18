@@ -35,6 +35,7 @@
 #include <llcommon-internal.h>
 #include <llfunction.h>
 #include <llfunction-internal.h>
+#include <llinstr-internal.h>
 #include <lloperand-internal.h>
 #include <llsupport-internal.h>
 
@@ -46,7 +47,7 @@
  **/
 
 void
-ll_instruction_call(Instr* instr, LLState* state)
+ll_instruction_call(LLInstr* instr, LLState* state)
 {
     LLVMTypeRef i64 = LLVMInt64TypeInContext(state->context);
 
@@ -108,7 +109,7 @@ ll_instruction_call(Instr* instr, LLState* state)
 }
 
 void
-ll_instruction_ret(Instr* instr, LLState* state)
+ll_instruction_ret(LLInstr* instr, LLState* state)
 {
     LLVMTypeRef fnType = LLVMGetElementType(LLVMTypeOf(state->currentFunction->llvmFunction));
     LLVMTypeRef retType = LLVMGetReturnType(fnType);

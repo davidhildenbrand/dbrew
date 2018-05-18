@@ -38,6 +38,7 @@
 #include <llflags-internal.h>
 #include <llfunction.h>
 #include <llfunction-internal.h>
+#include <llinstr-internal.h>
 #include <lloperand-internal.h>
 #include <llsupport-internal.h>
 
@@ -60,7 +61,7 @@ typedef enum ConversionType ConversionType;
 struct ConversionDescriptor {
     ConversionType type;
     union {
-        void (*function)(Instr* instr, LLState* state);
+        void (*function)(LLInstr* instr, LLState* state);
         struct {
             OperandDataType dataType;
             PartialRegisterHandling prh;
@@ -226,7 +227,7 @@ static const ConversionDescriptor descriptors[IT_Max] = {
  * \param state The module state
  **/
 void
-ll_generate_instruction(Instr* instr, LLState* state)
+ll_generate_instruction(LLInstr* instr, LLState* state)
 {
     // Set new instruction pointer register
     uintptr_t rip = instr->addr + instr->len;

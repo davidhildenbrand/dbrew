@@ -32,35 +32,36 @@
 
 #include <llcommon.h>
 #include <llcommon-internal.h>
+#include <llinstr-internal.h>
 
-void ll_instruction_movgp(Instr*, LLState*);
-void ll_instruction_add(Instr*, LLState*);
-void ll_instruction_sub(Instr*, LLState*);
-void ll_instruction_cmp(Instr*, LLState*);
-void ll_instruction_test(Instr*, LLState*);
-void ll_instruction_notneg(Instr*, LLState*);
-void ll_instruction_incdec(Instr*, LLState*);
-void ll_instruction_mul(Instr*, LLState*);
-void ll_instruction_rotate(Instr*, LLState*);
-void ll_instruction_lea(Instr*, LLState*);
-void ll_instruction_cmov(Instr*, LLState*);
-void ll_instruction_setcc(Instr*, LLState*);
-void ll_instruction_cdqe(Instr*, LLState*);
+void ll_instruction_movgp(LLInstr*, LLState*);
+void ll_instruction_add(LLInstr*, LLState*);
+void ll_instruction_sub(LLInstr*, LLState*);
+void ll_instruction_cmp(LLInstr*, LLState*);
+void ll_instruction_test(LLInstr*, LLState*);
+void ll_instruction_notneg(LLInstr*, LLState*);
+void ll_instruction_incdec(LLInstr*, LLState*);
+void ll_instruction_mul(LLInstr*, LLState*);
+void ll_instruction_rotate(LLInstr*, LLState*);
+void ll_instruction_lea(LLInstr*, LLState*);
+void ll_instruction_cmov(LLInstr*, LLState*);
+void ll_instruction_setcc(LLInstr*, LLState*);
+void ll_instruction_cdqe(LLInstr*, LLState*);
 
-void ll_instruction_call(Instr*, LLState*);
-void ll_instruction_ret(Instr*, LLState*);
+void ll_instruction_call(LLInstr*, LLState*);
+void ll_instruction_ret(LLInstr*, LLState*);
 
-void ll_instruction_stack(Instr*, LLState*);
+void ll_instruction_stack(LLInstr*, LLState*);
 
-void ll_instruction_movq(Instr* instr, LLState* state);
-void ll_instruction_movs(Instr* instr, LLState* state);
-void ll_instruction_movp(Instr* instr, LLState* state);
-void ll_instruction_movdq(Instr* instr, LLState* state);
-void ll_instruction_movlp(Instr* instr, LLState* state);
-void ll_instruction_movhps(Instr* instr, LLState* state);
-void ll_instruction_movhpd(Instr* instr, LLState* state);
-void ll_instruction_unpckl(Instr* instr, LLState* state);
+void ll_instruction_movq(LLInstr* instr, LLState* state);
+void ll_instruction_movs(LLInstr* instr, LLState* state);
+void ll_instruction_movp(LLInstr* instr, LLState* state);
+void ll_instruction_movdq(LLInstr* instr, LLState* state);
+void ll_instruction_movlp(LLInstr* instr, LLState* state);
+void ll_instruction_movhps(LLInstr* instr, LLState* state);
+void ll_instruction_movhpd(LLInstr* instr, LLState* state);
+void ll_instruction_unpckl(LLInstr* instr, LLState* state);
 
-void ll_generate_instruction(Instr*, LLState*);
+void ll_generate_instruction(LLInstr*, LLState*);
 
 #endif

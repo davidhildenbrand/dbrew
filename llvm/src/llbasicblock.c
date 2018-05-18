@@ -28,13 +28,13 @@
 #include <llvm-c/Core.h>
 
 #include <instr.h>
-#include <printer.h>
 
 #include <llbasicblock-internal.h>
 
 #include <llcommon.h>
 #include <llcommon-internal.h>
 #include <llflags-internal.h>
+#include <llinstr-internal.h>
 #include <llinstruction-internal.h>
 #include <llfunction-internal.h>
 
@@ -65,7 +65,7 @@ struct LLBasicBlock {
     /**
      * \brief The instructions
      **/
-    Instr* instrs;
+    LLInstr* instrs;
 
     /**
      * \brief The branch basic block, or NULL
