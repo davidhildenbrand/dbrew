@@ -11,6 +11,7 @@
 
 typedef void(*StencilFunction)(void*, double* restrict, double* restrict, uint64_t);
 typedef void(*StencilLineFunction)(void*, double* restrict, double* restrict, uint64_t, StencilFunction);
+typedef void(*StencilMatrixFunction)(void*, double* restrict, double* restrict, uint64_t, StencilFunction);
 typedef void(*ParameterSetupFunction)(void**, void**, void**);
 typedef void(*TestFunction)(void*, StencilFunction, double*, double*);
 
@@ -95,6 +96,14 @@ stencil_element_sorted_struct(SortedStencil* restrict s, double* restrict b, dou
 
 static
 void
+stencil_element_dbrew(void* a, double* restrict b, double* restrict c, uint64_t index, StencilFunction fn)
+{
+    fn(a, b, c, STENCIL_OFFSET(index, 0, 0));
+    __asm__ volatile("" ::: "memory"); // avoid tail calls
+}
+
+static
+void
 stencil_line_native(void* a, double* restrict b, double* restrict c, uint64_t index, StencilFunction __attribute__((unused)) fn)
 {
     uint64_t j;
@@ -137,6 +146,62 @@ stencil_line_dbrew(void* a, double* restrict b, double* restrict c, uint64_t ind
     }
 }
 
+static
+void
+stencil_matrix_native(void* a, double* restrict b, double* restrict c, uint64_t __attribute__((unused)) index, StencilFunction __attribute__((unused)) fn)
+{
+    uint64_t i, j;
+    for (i = 1; i < STENCIL_N; ++i)
+    {
+        for (j = 1; j < STENCIL_N; ++j)
+        {
+            stencil_element_native(a, b, c, STENCIL_INDEX(j, i));
+        }
+    }
+}
+
+static
+void
+stencil_matrix_struct(void* a, double* restrict b, double* restrict c, uint64_t __attribute__((unused)) index, StencilFunction __attribute__((unused)) fn)
+{
+    uint64_t i, j;
+    for (i = 1; i < STENCIL_N; ++i)
+    {
+        for (j = 1; j < STENCIL_N; ++j)
+        {
+            stencil_element_struct(a, b, c, STENCIL_INDEX(j, i));
+        }
+    }
+}
+
+static
+void
+stencil_matrix_sorted_struct(void* a, double* restrict b, double* restrict c, uint64_t __attribute__((unused)) index, StencilFunction __attribute__((unused)) fn)
+{
+    uint64_t i, j;
+    for (i = 1; i < STENCIL_N; ++i)
+    {
+        for (j = 1; j < STENCIL_N; ++j)
+        {
+            stencil_element_sorted_struct(a, b, c, STENCIL_INDEX(j, i));
+        }
+    }
+}
+
+static
+void
+stencil_matrix_dbrew(void* a, double* restrict b, double* restrict c, uint64_t __attribute__((unused)) index, StencilFunction fn)
+{
+    uint64_t i, j;
+    for (i = 1; i < STENCIL_N; ++i)
+    {
+        for (j = 1; j < STENCIL_N; ++j)
+        {
+            fn(a, b, c, STENCIL_INDEX(j, i));
+        }
+    }
+}
+
 static void
 compute_jacobi(void* restrict a, StencilFunction fn, double* restrict b, double* restrict c)
 {
@@ -165,6 +230,19 @@ compute_jacobi_line(void* restrict a, StencilLineFunction fn, double* restrict b
 
         for (i = 1; i < STENCIL_N; i = i + 1)
             fn(a, b, c, STENCIL_INDEX(0, i), NULL);
+    }
+}
+
+static void
+compute_jacobi_matrix(void* restrict a, StencilMatrixFunction fn, double* restrict b, double* restrict c)
+{
+    for (uint64_t iter = 0; iter < 1000; iter = iter + 1)
+    {
+        double* temp = c;
+        c = b;
+        b = temp;
+
+        fn(a, b, c, 0, NULL);
     }
 }
 
@@ -223,63 +301,70 @@ enum BenchmarkMode {
 
 typedef enum BenchmarkMode BenchmarkMode;
 
+enum StencilGranularity {
+    GRAN_ELEM = 0,
+    GRAN_LINE = 1,
+    GRAN_MATRIX = 2,
+};
+
+typedef enum StencilGranularity StencilGranularity; 
+
 struct BenchmarkArgs {
     BenchmarkMode mode;
+    StencilGranularity granularity;
     size_t runCount;
     bool decodeGenerated;
-    bool useLineKernel;
 };
 
 typedef struct BenchmarkArgs BenchmarkArgs;
 
 struct BenchmarkStencilConfig {
-    StencilFunction kernelfn;
-    StencilLineFunction linefn;
+    void* funcs[3];
     void* data;
 };
 
 typedef struct BenchmarkStencilConfig BenchmarkStencilConfig;
 
 static const BenchmarkStencilConfig benchmarkConfigs[] = {
-    { (StencilFunction) stencil_element_native, stencil_line_native, NULL },
-    { (StencilFunction) stencil_element_struct, stencil_line_struct, &s5 },
-    { (StencilFunction) stencil_element_sorted_struct, stencil_line_sorted_struct, &s5s },
+    { { (void*) stencil_element_native, (void*) stencil_line_native, (void*) stencil_matrix_native }, NULL },
+    { { (void*) stencil_element_struct, (void*) stencil_line_struct, (void*) stencil_matrix_struct }, &s5 },
+    { { (void*) stencil_element_sorted_struct, (void*) stencil_line_sorted_struct, (void*) stencil_matrix_sorted_struct }, &s5s },
 };
-
-
-JTimer timerTotal, timerCompile, timerRun;
 
 static
 Rewriter*
-benchmark_init_dbrew(bool useLineKernel, StencilFunction fn)
+benchmark_init_dbrew(StencilGranularity granularity)
 {
     Rewriter* r = dbrew_new();
     dbrew_verbose(r, false, false, false);
     dbrew_optverbose(r, false);
     dbrew_set_decoding_capacity(r, 100000, 100);
     dbrew_set_capture_capacity(r, 100000, 100, 10000);
+    
+    switch (granularity)
+    {
+        case GRAN_ELEM:
+            dbrew_set_function(r, (uintptr_t) stencil_element_dbrew);
+            break;
+        case GRAN_LINE:
+            dbrew_set_function(r, (uintptr_t) stencil_line_dbrew);
+            break;
+        case GRAN_MATRIX:
+            dbrew_set_function(r, (uintptr_t) stencil_matrix_dbrew);
+            break;
+    }
 
-    if (useLineKernel)
-    {
-        dbrew_set_function(r, (uintptr_t) stencil_line_dbrew);
-        dbrew_config_staticpar(r, 0);
-        dbrew_config_staticpar(r, 4);
-        dbrew_config_parcount(r, 5);
-        dbrew_config_force_unknown(r, 0);
-    }
-    else
-    {
-        dbrew_set_function(r, (uintptr_t) fn);
-        dbrew_config_staticpar(r, 0);
-        dbrew_config_parcount(r, 4);
-    }
+    dbrew_config_staticpar(r, 0);
+    dbrew_config_staticpar(r, 4);
+    dbrew_config_parcount(r, 5);
+    dbrew_config_force_unknown(r, 0);
 
     return r;
 }
 
 static
 void
-benchmark_run2(bool isFirst, const BenchmarkArgs* args, const BenchmarkStencilConfig* config)
+benchmark_run2(size_t configIndex, const BenchmarkArgs* args, const BenchmarkStencilConfig* config)
 {
     void* arg0 = config->data;
 
@@ -297,15 +382,18 @@ benchmark_run2(bool isFirst, const BenchmarkArgs* args, const BenchmarkStencilCo
     LLFunction* llfn = NULL;
     Rewriter* r = NULL;
 
-    uintptr_t baseFunction = args->useLineKernel ? (uintptr_t) config->linefn : (uintptr_t) config->kernelfn;
+    uintptr_t baseFunction = (uintptr_t) config->funcs[args->granularity];
     uintptr_t processedFunction;
 
-    JTimerCont(&timerTotal);
+    JTimer timerCompile = {0}, timerRun = {0};
+
+    __asm__ volatile("" ::: "memory");
     JTimerCont(&timerCompile);
+    __asm__ volatile("" ::: "memory");
 
     if (args->mode != BENCHMARK_PLAIN)
     {
-        r = benchmark_init_dbrew(args->useLineKernel, config->kernelfn);
+        r = benchmark_init_dbrew(args->granularity);
         dbrew_optverbose(r, args->decodeGenerated);
     }
 
@@ -322,11 +410,11 @@ benchmark_run2(bool isFirst, const BenchmarkArgs* args, const BenchmarkStencilCo
             break;
 
         case BENCHMARK_DBREW:
-            processedFunction = dbrew_rewrite(r, arg0, arg1, arg2, 20, config->kernelfn);
+            processedFunction = dbrew_rewrite(r, arg0, arg1, arg2, 20, config->funcs[0]);
             break;
 
         case BENCHMARK_DBREW_LLVM:
-            processedFunction = dbrew_llvm_rewrite(r, arg0, arg1, arg2, 20, config->kernelfn);
+            processedFunction = dbrew_llvm_rewrite(r, arg0, arg1, arg2, 20, config->funcs[0]);
             break;
 
         case BENCHMARK_LLVM:
@@ -343,7 +431,7 @@ benchmark_run2(bool isFirst, const BenchmarkArgs* args, const BenchmarkStencilCo
             break;
 
         case BENCHMARK_DBREW_LLVM_TWICE:
-            processedFunction = dbrew_llvm_rewrite(r, arg0, arg1, arg2, 20, config->kernelfn);
+            processedFunction = dbrew_llvm_rewrite(r, arg0, arg1, arg2, 20, config->funcs[0]);
 
             llfn = ll_decode_function(processedFunction, (DecodeFunc) dbrew_decode, r, &llconfig, state);
             assert(llfn != NULL);
@@ -362,38 +450,47 @@ benchmark_run2(bool isFirst, const BenchmarkArgs* args, const BenchmarkStencilCo
             ll_engine_dump(state);
     }
 
+    __asm__ volatile("" ::: "memory");
     JTimerStop(&timerCompile);
+    __asm__ volatile("" ::: "memory");
 
     if (args->decodeGenerated)
     {
-        JTimerStop(&timerTotal);
-
         if (state == NULL)
             state = ll_engine_init();
 
         if (r == NULL)
-            r = benchmark_init_dbrew(true, NULL);
+            r = benchmark_init_dbrew(true);
 
         // Print out decoded assembly.
         dbrew_verbose(r, true, false, false);
         ll_decode_function((uintptr_t) processedFunction, (DecodeFunc) dbrew_decode, r, &llconfig, state);
-
-        JTimerCont(&timerTotal);
     }
 
+    __asm__ volatile("" ::: "memory");
     JTimerCont(&timerRun);
-    if (args->useLineKernel)
-        for (size_t runs = 0; runs < args->runCount; runs++)
-            compute_jacobi_line(arg0, (StencilLineFunction) processedFunction, arg1, arg2);
-    else
-        for (size_t runs = 0; runs < args->runCount; runs++)
-            compute_jacobi(arg0, (StencilFunction) processedFunction, arg1, arg2);
+    __asm__ volatile("" ::: "memory");
+    switch (args->granularity)
+    {
+        case GRAN_ELEM:
+            for (size_t runs = 0; runs < args->runCount; runs++)
+                compute_jacobi(arg0, (StencilFunction) processedFunction, arg1, arg2);
+            break;
+        case GRAN_LINE:
+            for (size_t runs = 0; runs < args->runCount; runs++)
+                compute_jacobi_line(arg0, (StencilLineFunction) processedFunction, arg1, arg2);
+            break;
+        case GRAN_MATRIX:
+            for (size_t runs = 0; runs < args->runCount; runs++)
+                compute_jacobi_matrix(arg0, (StencilMatrixFunction) processedFunction, arg1, arg2);
+            break;
+    }
+    __asm__ volatile("" ::: "memory");
     JTimerStop(&timerRun);
-    JTimerStop(&timerTotal);
+    __asm__ volatile("" ::: "memory");
 
-    // Smoke test to see whether results seem to be correct.
-    if (isFirst)
-        printf("matrix(n-1,n-1) = %f\n", arg2[STENCIL_INDEX(STENCIL_N-1, STENCIL_N-1)]);
+    printf("matrix(n-1,n-1) = %f\n", arg2[STENCIL_INDEX(STENCIL_N-1, STENCIL_N-1)]);
+    printf("transmode=%d;gran=%u;datatype=%zu;n=%d;ctime=%f;rtime=%f\n", args->mode, args->granularity, configIndex, STENCIL_N, JTimerRead(&timerCompile), JTimerRead(&timerRun));
 
     free(arg1);
     free(arg2);
@@ -408,37 +505,35 @@ benchmark_run2(bool isFirst, const BenchmarkArgs* args, const BenchmarkStencilCo
 int
 main(int argc, char** argv)
 {
-    if (argc < 5) {
-        printf("Usage: %s [config] [mode] [compiles] [runs per compile] ([decode generated])\n", argv[0]);
+    if (argc < 6) {
+        printf("Usage: %s [transmode] [granularity] [datatype] [compiles] [runs per compile] ([decode generated])\n", argv[0]);
         return 1;
     }
 
-    size_t configIndex = atoi(argv[1]);
-    configIndex = configIndex % (2 * sizeof(benchmarkConfigs) / sizeof(BenchmarkStencilConfig));
+    size_t configIndex = atoi(argv[3]);
+    configIndex = configIndex % (sizeof(benchmarkConfigs) / sizeof(BenchmarkStencilConfig));
 
     bool decodeGenerated = false;
-    if (argc >= 6)
-        decodeGenerated = atoi(argv[5]) != 0;
+    if (argc >= 7)
+        decodeGenerated = atoi(argv[6]) != 0;
 
     BenchmarkArgs args = {
-        .mode = atoi(argv[2]),
-        .runCount = atoi(argv[4]),
+        .mode = atoi(argv[1]),
+        .granularity = atoi(argv[2]) % 3,
+        .runCount = atoi(argv[5]),
         .decodeGenerated = decodeGenerated,
-        .useLineKernel = configIndex % 2,
     };
 
-    size_t iterationCount = atoi(argv[3]);
+    size_t iterationCount = atoi(argv[4]);
 
-    const BenchmarkStencilConfig* config = &benchmarkConfigs[configIndex / 2];
+    const BenchmarkStencilConfig* config = &benchmarkConfigs[configIndex];
 
     for (size_t i = 0; i < iterationCount; i++)
     {
-        benchmark_run2(i == 0, &args, config);
+        benchmark_run2(configIndex, &args, config);
         args.decodeGenerated = false;
     }
 
-    printf("Mode %d Config %lu Times %f %f %f\n", args.mode, configIndex, JTimerRead(&timerTotal), JTimerRead(&timerCompile), JTimerRead(&timerRun));
-    printf("Normalized %f %f %f\n", JTimerRead(&timerTotal) / iterationCount, JTimerRead(&timerCompile) / iterationCount, JTimerRead(&timerRun) / iterationCount);
 
     return 0;
 }

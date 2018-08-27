@@ -14,19 +14,18 @@ LLVM_MODULES = bitwriter core ipo mcjit scalaropts support vectorize x86codegen
 
 CFLAGS=-g -std=c99 -I../include -I../../include/priv -I../../include $(WFLAGS) \
 	   `$(LLVM_CONFIG) --cppflags` -D_POSIX_C_SOURCE=200809 \
-	   -DSTENCIL_INTERLINES=$(INTERLINES) -O3 -march=native -mno-avx
-LDFLAGS = `$(LLVM_CONFIG) --ldflags` -g
-LDLIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` -lstdc++ -lm -lz -ldl -lpthread -ltinfo
+	   -DSTENCIL_INTERLINES=$(INTERLINES) -O3 -mno-avx
+LDFLAGS = `$(LLVM_CONFIG) --ldflags` -g -Wl,--as-needed -Wl,-z,now,-z,relro
+LDLIBS = ../libdbrew-llvm.a ../../libdbrew.a \
+        `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` \
+        -lstdc++ -lm -lz -ldl -lpthread -ltinfo
 
-all: benchmark-$(INTERLINES).o
+.PHONY: all
+all: benchmark
 
-benchmark-$(INTERLINES).o: benchmark.c timer.c Makefile
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ benchmark.c timer.c ../../libdbrew.a ../libdbrew-llvm.a $(LDLIBS)
+benchmark: benchmark.c timer.c
 
 .PHONY: clean
 clean:
-	rm -f benchmark-*.o
+	rm -f benchmark
 
-.PHONY: benchmark
-benchmark:
-	./benchmark.sh
