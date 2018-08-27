@@ -23,14 +23,14 @@ WFLAGS_CXX=$(WFLAGS_CXX_BASE)
 endif
 
 CFLAGS=`$(LLVM_CONFIG) --cppflags` -O2 -g -std=c99 -Iinclude -I../include/priv \
-       -I../include $(WFLAGS)
+       -I../include $(WFLAGS) `pkg-config --cflags glib-2.0`
 CXXFLAGS=`$(LLVM_CONFIG) --cppflags` -O2 -g -std=c++11 -Iinclude $(WFLAGS_CXX)
 LDFLAGS = `$(LLVM_CONFIG) --ldflags` -g
 
 # TODO: Switch back to shared library. This is *so* slow and large...
 #LLVM_MODULES = bitwriter core ipo mcjit scalaropts support vectorize x86codegen
 #LDLIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` -lstdc++ -lm -lz -ldl -lpthread -ltinfo
-LDLIBS=`$(LLVM_CONFIG) --system-libs --libs`
+LDLIBS=`$(LLVM_CONFIG) --system-libs --libs` `pkg-config --libs glib-2.0`
 # LDLIBS = -lLLVM-3.8
 
 SRCS_C = $(wildcard src/*.c)
@@ -52,8 +52,8 @@ libdbrew-llvm.a: $(OBJS_C) $(OBJS_CXX) $(HEADERS)
 clean:
 	rm -f $(OBJS_C) $(OBJS_CXX) libdbrew-llvm.a $(TEST_TARGETS)
 
-$(TEST_TARGETS): test_%: libdbrew-llvm.a
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ test/$*.c `pkg-config --cflags --libs glib-2.0` -L. -ldbrew-llvm -L.. -ldbrew $(LDLIBS)
+$(TEST_TARGETS): test_%: libdbrew-llvm.a test/%.o
+	$(CXX) $(CFLAGS) $(LDFLAGS) -o $@ test/$*.o libdbrew-llvm.a ../libdbrew.a $(LDLIBS)
 
 test: libdbrew-llvm.a $(TEST_TARGETS)
 	$(foreach TARGET,$(TEST_TARGETS),gtester --verbose --keep-going ./$(TARGET))
