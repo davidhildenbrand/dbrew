@@ -2104,41 +2104,46 @@ void processInstr(RContext* c, Instr* instr)
         break;
 
     case IT_IMUL:
-        getOpValue(&v1, es, &(instr->dst));
-        getOpValue(&v2, es, &(instr->src));
+        if (instr->form == OF_2) {
+            getOpValue(&v1, es, &(instr->dst));
+            getOpValue(&v2, es, &(instr->src));
 
-        assert(opIsGPReg(&(instr->dst)));
-        assert(v1.type == v2.type);
-        switch(instr->src.type) {
-        case OT_Reg32:
-        case OT_Ind32:
-            vres.type = VT_32;
-            vres.val = (uint64_t) ((int32_t) v1.val * (int32_t) v2.val);
-            break;
+            assert(opIsGPReg(&(instr->dst)));
+            assert(v1.type == v2.type);
+            switch(instr->src.type) {
+            case OT_Reg32:
+            case OT_Ind32:
+                vres.type = VT_32;
+                vres.val = (uint64_t) ((int32_t) v1.val * (int32_t) v2.val);
+                break;
 
-        case OT_Reg64:
-        case OT_Ind64:
-            vres.type = VT_64;
-            vres.val = (uint64_t) ((int64_t) v1.val * (int64_t) v2.val);
-            break;
+            case OT_Reg64:
+            case OT_Ind64:
+                vres.type = VT_64;
+                vres.val = (uint64_t) ((int64_t) v1.val * (int64_t) v2.val);
+                break;
 
-        default:
-            setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
-            return;
+            default:
+                setEmulatorError(c, instr, ET_UnsupportedOperands, 0);
+                return;
+            }
+
+            // optimization: multiply with static 0 results in static 0
+            if ((msIsStatic(v1.state) && (v1.val == 0)) ||
+                (msIsStatic(v2.state) && (v2.val == 0)))
+                cs = CS_STATIC;
+            else
+                cs = combineState(v1.state.cState, v2.state.cState, 0);
+            initMetaState(&(vres.state), cs);
+
+            // for capture we need state of dst, do before setting dst
+            captureBinaryOp(c, instr, es, &vres);
+            setOpValue(&vres, es, &(instr->dst));
+            setOpState(vres.state, es, &(instr->dst));
+        } else {
+            assert(instr->form == OF_3);
+            assert(false && "IMUL_3 emulation not implemented");
         }
-
-        // optimization: multiply with static 0 results in static 0
-        if ((msIsStatic(v1.state) && (v1.val == 0)) ||
-            (msIsStatic(v2.state) && (v2.val == 0)))
-            cs = CS_STATIC;
-        else
-            cs = combineState(v1.state.cState, v2.state.cState, 0);
-        initMetaState(&(vres.state), cs);
-
-        // for capture we need state of dst, do before setting dst
-        captureBinaryOp(c, instr, es, &vres);
-        setOpValue(&vres, es, &(instr->dst));
-        setOpState(vres.state, es, &(instr->dst));
         break;
 
     case IT_IDIV1: {
