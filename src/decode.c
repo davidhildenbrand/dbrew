@@ -1853,7 +1853,6 @@ void decode_FF(DContext* c)
 
     case 4:
         // jmp* r/m64: absolute indirect
-        assert(c->rex == 0);
         opOverwriteType(&c->o1, VT_64);
         addUnaryOp(c->r, c, IT_JMPI, &c->o1);
         c->exit = true;
