@@ -10,12 +10,12 @@ void JTimerInit(JTimer* timer) {
 }
 
 void JTimerCont(JTimer* timer) {
-  clock_gettime(CLOCK_REALTIME, &(timer->current_time));
+  clock_gettime(CLOCK_MONOTONIC_RAW, &(timer->current_time));
 }
 
 void JTimerStop(JTimer* timer) {
   struct timespec comp;
-  clock_gettime(CLOCK_REALTIME, &comp);
+  clock_gettime(CLOCK_MONOTONIC_RAW, &comp);
 
   timer->timetaken_time.tv_sec += comp.tv_sec - timer->current_time.tv_sec;
   timer->timetaken_time.tv_nsec += comp.tv_nsec - timer->current_time.tv_nsec;
