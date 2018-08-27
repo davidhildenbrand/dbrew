@@ -23,7 +23,7 @@ LDLIBS = ../libdbrew-llvm.a ../../libdbrew.a \
 .PHONY: all
 all: benchmark
 
-benchmark: benchmark.c timer.c
+benchmark: benchmark.c timer.c kernels.c
 
 .PHONY: clean
 clean:

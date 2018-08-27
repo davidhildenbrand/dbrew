@@ -7,200 +7,20 @@
 #include <dbrew.h>
 #include <dbrew-llvm.h>
 
+#include "kernels.h"
 #include "timer.h"
 
-typedef void(*StencilFunction)(void*, double* restrict, double* restrict, uint64_t);
+
 typedef void(*StencilLineFunction)(void*, double* restrict, double* restrict, uint64_t, StencilFunction);
 typedef void(*StencilMatrixFunction)(void*, double* restrict, double* restrict, uint64_t, StencilFunction);
 typedef void(*ParameterSetupFunction)(void**, void**, void**);
 typedef void(*TestFunction)(void*, StencilFunction, double*, double*);
 
 
-typedef struct {
-    uint64_t xdiff, ydiff;
-    double factor;
-} StencilPoint;
-
-typedef struct {
-    uint64_t points;
-    StencilPoint p[];
-} Stencil;
-
-typedef struct {
-    double factor;
-    uint64_t points;
-    StencilPoint* p;
-} StencilFactor;
-
-typedef struct {
-    uint64_t factors;
-    StencilFactor f[];
-} SortedStencil;
-
 Stencil s5 = {4, {{-1,0,0.25},{1,0,0.25},{0,-1,0.25},{0,1,0.25}}};
 
 SortedStencil s5s = {1, {{0.25,4,&(s5.p[0])}}};
 
-#ifndef STENCIL_INTERLINES
-#define STENCIL_INTERLINES 0
-#endif
-
-#define STENCIL_N ((STENCIL_INTERLINES) * 8 + 8)
-#define STENCIL_INDEX(x,y) ((y) * ((STENCIL_N) + 1) + (x))
-#define STENCIL_OFFSET(base,x,y) ((base) + (y) * ((STENCIL_N) + 1) + (x))
-
-
-
-static
-inline
-void
-stencil_element_native(void* __attribute__((unused)) a, double* restrict b, double* restrict c, uint64_t index)
-{
-    c[index] = 0.25 * (b[STENCIL_OFFSET(index, 0, -1)] + b[STENCIL_OFFSET(index, 0, 1)] + b[STENCIL_OFFSET(index, -1, 0)] + b[STENCIL_OFFSET(index, 1, 0)]);
-}
-
-static
-inline
-void
-stencil_element_struct(Stencil* restrict s, double* restrict b, double* restrict c, uint64_t index)
-{
-    double result1 = 0;
-    for(uint64_t i = 0; i < s->points; i++)
-    {
-        StencilPoint* p = s->p + i;
-        result1 += p->factor * b[STENCIL_OFFSET(index, p->xdiff, p->ydiff)];
-    }
-    c[index] = result1;
-}
-
-static
-inline
-void
-stencil_element_sorted_struct(SortedStencil* restrict s, double* restrict b, double* restrict c, uint64_t index)
-{
-    double result1 = 0, sum1 = 0;
-    for (uint64_t i = 0; i < s->factors; i++)
-    {
-        StencilFactor* sf = s->f + i;
-        StencilPoint* p = sf->p;
-        sum1 = b[STENCIL_OFFSET(index, p->xdiff, p->ydiff)];
-        for (uint64_t j = 1; j < sf->points; j++)
-        {
-            p = sf->p + j;
-            sum1 += b[STENCIL_OFFSET(index, p->xdiff, p->ydiff)];
-        }
-        result1 += sf->factor * sum1;
-    }
-    c[index] = result1;
-}
-
-static
-void
-stencil_element_dbrew(void* a, double* restrict b, double* restrict c, uint64_t index, StencilFunction fn)
-{
-    fn(a, b, c, STENCIL_OFFSET(index, 0, 0));
-    __asm__ volatile("" ::: "memory"); // avoid tail calls
-}
-
-static
-void
-stencil_line_native(void* a, double* restrict b, double* restrict c, uint64_t index, StencilFunction __attribute__((unused)) fn)
-{
-    uint64_t j;
-    for (j = 1; j < STENCIL_N; ++j)
-    {
-        stencil_element_native(a, b, c, STENCIL_OFFSET(index, j, 0));
-    }
-}
-
-static
-void
-stencil_line_struct(void* a, double* restrict b, double* restrict c, uint64_t index, StencilFunction __attribute__((unused)) fn)
-{
-    uint64_t j;
-    for (j = 1; j < STENCIL_N; ++j)
-    {
-        stencil_element_struct(a, b, c, STENCIL_OFFSET(index, j, 0));
-    }
-}
-
-static
-void
-stencil_line_sorted_struct(void* a, double* restrict b, double* restrict c, uint64_t index, StencilFunction __attribute__((unused)) fn)
-{
-    uint64_t j;
-    for (j = 1; j < STENCIL_N; ++j)
-    {
-        stencil_element_sorted_struct(a, b, c, STENCIL_OFFSET(index, j, 0));
-    }
-}
-
-static
-void
-stencil_line_dbrew(void* a, double* restrict b, double* restrict c, uint64_t index, StencilFunction fn)
-{
-    uint64_t j;
-    for (j = 1; j < STENCIL_N; ++j)
-    {
-        fn(a, b, c, STENCIL_OFFSET(index, j, 0));
-    }
-}
-
-static
-void
-stencil_matrix_native(void* a, double* restrict b, double* restrict c, uint64_t __attribute__((unused)) index, StencilFunction __attribute__((unused)) fn)
-{
-    uint64_t i, j;
-    for (i = 1; i < STENCIL_N; ++i)
-    {
-        for (j = 1; j < STENCIL_N; ++j)
-        {
-            stencil_element_native(a, b, c, STENCIL_INDEX(j, i));
-        }
-    }
-}
-
-static
-void
-stencil_matrix_struct(void* a, double* restrict b, double* restrict c, uint64_t __attribute__((unused)) index, StencilFunction __attribute__((unused)) fn)
-{
-    uint64_t i, j;
-    for (i = 1; i < STENCIL_N; ++i)
-    {
-        for (j = 1; j < STENCIL_N; ++j)
-        {
-            stencil_element_struct(a, b, c, STENCIL_INDEX(j, i));
-        }
-    }
-}
-
-static
-void
-stencil_matrix_sorted_struct(void* a, double* restrict b, double* restrict c, uint64_t __attribute__((unused)) index, StencilFunction __attribute__((unused)) fn)
-{
-    uint64_t i, j;
-    for (i = 1; i < STENCIL_N; ++i)
-    {
-        for (j = 1; j < STENCIL_N; ++j)
-        {
-            stencil_element_sorted_struct(a, b, c, STENCIL_INDEX(j, i));
-        }
-    }
-}
-
-static
-void
-stencil_matrix_dbrew(void* a, double* restrict b, double* restrict c, uint64_t __attribute__((unused)) index, StencilFunction fn)
-{
-    uint64_t i, j;
-    for (i = 1; i < STENCIL_N; ++i)
-    {
-        for (j = 1; j < STENCIL_N; ++j)
-        {
-            fn(a, b, c, STENCIL_INDEX(j, i));
-        }
-    }
-}
 
 static void
 compute_jacobi(void* restrict a, StencilFunction fn, double* restrict b, double* restrict c)
