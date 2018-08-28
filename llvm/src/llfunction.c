@@ -409,6 +409,7 @@ ll_function_dispose(LLFunction* function)
             break;
         case LL_FUNCTION_DECLARATION:
         case LL_FUNCTION_SPECIALIZATION:
+        case LL_FUNCTION_EXTERNAL:
             break;
         default:
             warn_if_reached();
@@ -510,6 +511,7 @@ ll_function_build_ir(LLFunction* function, LLState* state)
             break;
         case LL_FUNCTION_DECLARATION:
         case LL_FUNCTION_SPECIALIZATION:
+        case LL_FUNCTION_EXTERNAL:
             break;
         default:
             warn_if_reached();

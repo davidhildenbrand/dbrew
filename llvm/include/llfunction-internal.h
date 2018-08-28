@@ -50,7 +50,11 @@ enum LLFunctionKind {
     /**
      * \brief The function is specialized
      **/
-    LL_FUNCTION_SPECIALIZATION
+    LL_FUNCTION_SPECIALIZATION,
+    /**
+     * \brief The function was loaded from a LLVM input file
+     **/
+    LL_FUNCTION_EXTERNAL,
 };
 
 typedef enum LLFunctionKind LLFunctionKind;
