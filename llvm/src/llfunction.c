@@ -296,6 +296,26 @@ ll_function_new_definition(uintptr_t address, LLConfig* config, LLState* state)
     return function;
 }
 
+LLFunction*
+ll_function_wrap_external(const char* name, LLState* state)
+{
+    LLVMValueRef llvmFunction = LLVMGetNamedFunction(state->module, name);
+
+    if (llvmFunction == NULL)
+        return NULL;
+
+    // The linkage was set to private when loading the external module. As we
+    // need to include the function in the symbol table without modifications of
+    // the function signature, set linkage to external (the default) again.
+    LLVMSetLinkage(llvmFunction, LLVMExternalLinkage);
+
+    LLFunction* function = ll_function_new(LL_FUNCTION_EXTERNAL, 0, state);
+    function->name = name;
+    function->llvmFunction = llvmFunction;
+
+    return function;
+}
+
 /**
  * Specialize a function by inlining the base function into a new wrapper
  * function and fixing a parameter. If the length of the value is larger than
