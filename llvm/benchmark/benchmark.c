@@ -111,12 +111,14 @@ print_matrix(double* b)
 
 
 enum BenchmarkMode {
-    BENCHMARK_PLAIN,
+    BENCHMARK_PLAIN = 0,
     BENCHMARK_DBREW,
     BENCHMARK_LLVM,
     BENCHMARK_LLVM_FIXED,
     BENCHMARK_DBREW_LLVM,
     BENCHMARK_DBREW_LLVM_TWICE,
+
+    BENCHMARK_MAX_MODE
 };
 
 typedef enum BenchmarkMode BenchmarkMode;
@@ -125,33 +127,65 @@ enum StencilGranularity {
     GRAN_ELEM = 0,
     GRAN_LINE = 1,
     GRAN_MATRIX = 2,
+
+    GRAN_MAX
 };
 
-typedef enum StencilGranularity StencilGranularity; 
+typedef enum StencilGranularity StencilGranularity;
+
+enum StencilDatatype {
+    DATA_NATIVE = 0,
+    DATA_STRUCT,
+    DATA_SORTED,
+
+    DATA_MAX
+};
+
+typedef enum StencilDatatype StencilDatatype;
 
 struct BenchmarkArgs {
     BenchmarkMode mode;
     StencilGranularity granularity;
+    StencilDatatype datatype;
     size_t runCount;
     bool decodeGenerated;
 };
 
 typedef struct BenchmarkArgs BenchmarkArgs;
 
-struct BenchmarkStencilConfig {
-    void* funcs[3];
-    void* data;
+const StencilFunction kernels[DATA_MAX * GRAN_MAX] = {
+    [DATA_NATIVE * GRAN_MAX + GRAN_ELEM] = (StencilFunction) stencil_element_native,
+    [DATA_STRUCT * GRAN_MAX + GRAN_ELEM] = (StencilFunction) stencil_element_struct,
+    [DATA_SORTED * GRAN_MAX + GRAN_ELEM] = (StencilFunction) stencil_element_sorted_struct,
+    [DATA_NATIVE * GRAN_MAX + GRAN_LINE] = (StencilFunction) stencil_line_native,
+    [DATA_STRUCT * GRAN_MAX + GRAN_LINE] = (StencilFunction) stencil_line_struct,
+    [DATA_SORTED * GRAN_MAX + GRAN_LINE] = (StencilFunction) stencil_line_sorted_struct,
+    [DATA_NATIVE * GRAN_MAX + GRAN_MATRIX] = (StencilFunction) stencil_matrix_native,
+    [DATA_STRUCT * GRAN_MAX + GRAN_MATRIX] = (StencilFunction) stencil_matrix_struct,
+    [DATA_SORTED * GRAN_MAX + GRAN_MATRIX] = (StencilFunction) stencil_matrix_sorted_struct,
 };
 
-typedef struct BenchmarkStencilConfig BenchmarkStencilConfig;
-
-static const BenchmarkStencilConfig benchmarkConfigs[] = {
-    { { (void*) stencil_element_native, (void*) stencil_line_native, (void*) stencil_matrix_native }, NULL },
-    { { (void*) stencil_element_struct, (void*) stencil_line_struct, (void*) stencil_matrix_struct }, &s5 },
-    { { (void*) stencil_element_sorted_struct, (void*) stencil_line_sorted_struct, (void*) stencil_matrix_sorted_struct }, &s5s },
+const char* const kernel_names[DATA_MAX * GRAN_MAX] = {
+    [DATA_NATIVE * GRAN_MAX + GRAN_ELEM] = "stencil_element_native",
+    [DATA_STRUCT * GRAN_MAX + GRAN_ELEM] = "stencil_element_struct",
+    [DATA_SORTED * GRAN_MAX + GRAN_ELEM] = "stencil_element_sorted_struct",
+    [DATA_NATIVE * GRAN_MAX + GRAN_LINE] = "stencil_line_native",
+    [DATA_STRUCT * GRAN_MAX + GRAN_LINE] = "stencil_line_struct",
+    [DATA_SORTED * GRAN_MAX + GRAN_LINE] = "stencil_line_sorted_struct",
+    [DATA_NATIVE * GRAN_MAX + GRAN_MATRIX] = "stencil_matrix_native",
+    [DATA_STRUCT * GRAN_MAX + GRAN_MATRIX] = "stencil_matrix_struct",
+    [DATA_SORTED * GRAN_MAX + GRAN_MATRIX] = "stencil_matrix_sorted_struct",
 };
 
-static
+void* const kernel_args[DATA_MAX] = {
+    [DATA_NATIVE] = NULL,
+    [DATA_STRUCT] = &s5,
+    [DATA_SORTED] = &s5s,
+};
+
+#define KERNEL(data,gran) kernels[(data)*GRAN_MAX + (gran)]
+#define KERNEL_NAME(data,gran) kernel_names[(data)*GRAN_MAX + (gran)]
+
 Rewriter*
 benchmark_init_dbrew(StencilGranularity granularity)
 {
@@ -184,9 +218,9 @@ benchmark_init_dbrew(StencilGranularity granularity)
 
 static
 void
-benchmark_run2(size_t configIndex, const BenchmarkArgs* args, const BenchmarkStencilConfig* config)
+benchmark_run2(const BenchmarkArgs* args)
 {
-    void* arg0 = config->data;
+    void* arg0 = kernel_args[args->datatype];
 
     double* arg1;
     double* arg2;
@@ -202,7 +236,7 @@ benchmark_run2(size_t configIndex, const BenchmarkArgs* args, const BenchmarkSte
     LLFunction* llfn = NULL;
     Rewriter* r = NULL;
 
-    uintptr_t baseFunction = (uintptr_t) config->funcs[args->granularity];
+    uintptr_t baseFunction = (uintptr_t) KERNEL(args->datatype, args->granularity);
     uintptr_t processedFunction;
 
     JTimer timerCompile = {0}, timerRun = {0};
@@ -230,11 +264,11 @@ benchmark_run2(size_t configIndex, const BenchmarkArgs* args, const BenchmarkSte
             break;
 
         case BENCHMARK_DBREW:
-            processedFunction = dbrew_rewrite(r, arg0, arg1, arg2, 20, config->funcs[0]);
+            processedFunction = dbrew_rewrite(r, arg0, arg1, arg2, 20, KERNEL(args->datatype, GRAN_ELEM));
             break;
 
         case BENCHMARK_DBREW_LLVM:
-            processedFunction = dbrew_llvm_rewrite(r, arg0, arg1, arg2, 20, config->funcs[0]);
+            processedFunction = dbrew_llvm_rewrite(r, arg0, arg1, arg2, 20, KERNEL(args->datatype, GRAN_ELEM));
             break;
 
         case BENCHMARK_LLVM:
@@ -251,7 +285,7 @@ benchmark_run2(size_t configIndex, const BenchmarkArgs* args, const BenchmarkSte
             break;
 
         case BENCHMARK_DBREW_LLVM_TWICE:
-            processedFunction = dbrew_llvm_rewrite(r, arg0, arg1, arg2, 20, config->funcs[0]);
+            processedFunction = dbrew_llvm_rewrite(r, arg0, arg1, arg2, 20, KERNEL(args->datatype, GRAN_ELEM));
 
             llfn = ll_decode_function(processedFunction, (DecodeFunc) dbrew_decode, r, &llconfig, state);
             assert(llfn != NULL);
@@ -310,7 +344,7 @@ benchmark_run2(size_t configIndex, const BenchmarkArgs* args, const BenchmarkSte
     __asm__ volatile("" ::: "memory");
 
     printf("matrix(n-1,n-1) = %f\n", arg2[STENCIL_INDEX(STENCIL_N-1, STENCIL_N-1)]);
-    printf("transmode=%d;gran=%u;datatype=%zu;n=%d;ctime=%f;rtime=%f\n", args->mode, args->granularity, configIndex, STENCIL_N, JTimerRead(&timerCompile), JTimerRead(&timerRun));
+    printf("transmode=%d;gran=%u;datatype=%u;n=%d;ctime=%f;rtime=%f\n", args->mode, args->granularity, args->datatype, STENCIL_N, JTimerRead(&timerCompile), JTimerRead(&timerRun));
 
     free(arg1);
     free(arg2);
@@ -330,27 +364,34 @@ main(int argc, char** argv)
         return 1;
     }
 
-    size_t configIndex = atoi(argv[3]);
-    configIndex = configIndex % (sizeof(benchmarkConfigs) / sizeof(BenchmarkStencilConfig));
-
     bool decodeGenerated = false;
     if (argc >= 7)
         decodeGenerated = atoi(argv[6]) != 0;
 
     BenchmarkArgs args = {
-        .mode = atoi(argv[1]),
+        .mode = strtoul(argv[1], NULL, 0),
         .granularity = atoi(argv[2]) % 3,
+        .datatype = strtoul(argv[3], NULL, 0),
         .runCount = atoi(argv[5]),
         .decodeGenerated = decodeGenerated,
     };
 
-    size_t iterationCount = atoi(argv[4]);
+    if (args.mode >= BENCHMARK_MAX_MODE)
+    {
+        printf("Invalid benchmark mode: %u\n", args.mode);
+        return 1;
+    }
+    if (args.datatype >= DATA_MAX)
+    {
+        printf("Invalid datatype: %u\n", args.datatype);
+        return 1;
+    }
 
-    const BenchmarkStencilConfig* config = &benchmarkConfigs[configIndex];
+    size_t iterationCount = atoi(argv[4]);
 
     for (size_t i = 0; i < iterationCount; i++)
     {
-        benchmark_run2(configIndex, &args, config);
+        benchmark_run2(&args);
         args.decodeGenerated = false;
     }
 
