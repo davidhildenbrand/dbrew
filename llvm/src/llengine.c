@@ -53,6 +53,52 @@
  * @{
  **/
 
+static
+LLState*
+ll_state_create(void)
+{
+    LLState* state;
+
+    state = calloc(1, sizeof(LLState));
+    state->context = LLVMContextCreate();
+
+    return state;
+}
+
+static
+bool
+ll_state_init_common(LLState* state)
+{
+    state->builder = LLVMCreateBuilderInContext(state->context);
+    state->functionCount = 0;
+    state->functionsAllocated = 0;
+    state->functions = NULL;
+
+    LLVMSetTarget(state->module, "x86_64-pc-linux-gnu");
+    LLVMLinkInMCJIT();
+    LLVMInitializeNativeAsmPrinter();
+    LLVMInitializeNativeTarget();
+
+    char* outerr = NULL;
+    if (ll_support_create_mcjit_compiler(&state->engine, state->module, &outerr))
+    {
+        printf("CRITICAL Could not setup execution engine: %s", outerr);
+        free(outerr);
+
+        return true;
+    }
+
+    state->emptyMD = LLVMMDNodeInContext(state->context, NULL, 0);
+    state->unrollMD = ll_support_metadata_loop_unroll(state->context);
+    state->globalOffsetBase = 0;
+    state->enableUnsafePointerOptimizations = false;
+    state->enableOverflowIntrinsics = false;
+    state->enableFastMath = false;
+    state->enableFullLoopUnroll = false;
+
+    return false;
+}
+
 /**
  * Initialize the LLVM module with the given configuration. This includes
  * setting up the MCJIT compiler and the LLVM module.
@@ -64,38 +110,17 @@
 LLState*
 ll_engine_init(void)
 {
-    LLState* state;
-    char* outerr = NULL;
+    LLState* state = ll_state_create();
+    if (state == NULL)
+        return NULL;
 
-    state = malloc(sizeof(LLState));
-    state->context = LLVMContextCreate();
     state->module = LLVMModuleCreateWithNameInContext("<llengine>", state->context);
-    state->builder = LLVMCreateBuilderInContext(state->context);
-    state->functionCount = 0;
-    state->functionsAllocated = 0;
-    state->functions = NULL;
 
-    LLVMSetTarget(state->module, "x86_64-pc-linux-gnu");
-    LLVMLinkInMCJIT();
-    LLVMInitializeNativeAsmPrinter();
-    LLVMInitializeNativeTarget();
-
-    if (ll_support_create_mcjit_compiler(&state->engine, state->module, &outerr))
+    if (ll_state_init_common(state))
     {
-        printf("CRITICAL Could not setup execution engine: %s", outerr);
-        free(outerr);
         free(state);
-
         return NULL;
     }
-
-    state->emptyMD = LLVMMDNodeInContext(state->context, NULL, 0);
-    state->unrollMD = ll_support_metadata_loop_unroll(state->context);
-    state->globalOffsetBase = 0;
-    state->enableUnsafePointerOptimizations = false;
-    state->enableOverflowIntrinsics = false;
-    state->enableFastMath = false;
-    state->enableFullLoopUnroll = false;
 
     return state;
 }
