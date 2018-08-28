@@ -34,6 +34,7 @@
 
 
 LLState* ll_engine_init(void);
+LLState* ll_engine_init_from_bc_file(char*);
 void ll_engine_dispose(LLState*);
 
 void ll_engine_enable_overflow_intrinsics(LLState*, bool);

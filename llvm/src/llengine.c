@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <llvm-c/Analysis.h>
+#include <llvm-c/BitReader.h>
 #include <llvm-c/BitWriter.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -115,6 +116,54 @@ ll_engine_init(void)
         return NULL;
 
     state->module = LLVMModuleCreateWithNameInContext("<llengine>", state->context);
+
+    if (ll_state_init_common(state))
+    {
+        free(state);
+        return NULL;
+    }
+
+    return state;
+}
+
+LLState*
+ll_engine_init_from_bc_file(char* fileName)
+{
+    LLState* state = ll_state_create();
+    if (state == NULL)
+        return NULL;
+
+    LLVMMemoryBufferRef bc_membuf;
+    char* outerr;
+    if (LLVMCreateMemoryBufferWithContentsOfFile(fileName, &bc_membuf, &outerr))
+    {
+        printf("CRITICAL Could not read bc file %s: %s\n", fileName, outerr);
+        free(state);
+
+        return NULL;
+    }
+
+    if (LLVMParseBitcodeInContext(state->context, bc_membuf, &state->module, &outerr))
+    {
+        printf("CRITICAL Could not parse bc file: %s\n", outerr);
+        LLVMDisposeMemoryBuffer(bc_membuf);
+        free(state);
+
+        return NULL;
+    }
+
+    LLVMDisposeMemoryBuffer(bc_membuf);
+
+    // Set all imported functions to private linkage. This avoids code
+    // generation and optimization for functions that are unused.
+    LLVMValueRef llvmFunction = LLVMGetFirstFunction(state->module);
+    while (llvmFunction != NULL)
+    {
+        // Function declarations, like memset, need to be public.
+        if (!LLVMIsDeclaration(llvmFunction))
+            LLVMSetLinkage(llvmFunction, LLVMPrivateLinkage);
+        llvmFunction = LLVMGetNextFunction(llvmFunction);
+    }
 
     if (ll_state_init_common(state))
     {
