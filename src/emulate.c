@@ -1584,7 +1584,15 @@ void captureUnaryOp(RContext* c, Instr* orig, EmuState* es, EmuValue* res)
 {
     Instr i;
 
-    if (msIsStatic(res->state)) return;
+    if (msIsStatic(res->state)) {
+        if (c->r->cc->force_unknown[es->depth]) {
+            initMetaState(&(res->state), CS_DYNAMIC);
+            initBinaryInstr(&i, IT_MOV, res->type,
+                            &(orig->dst), getImmOp(res->type, res->val));
+            capture(c, &i);
+        }
+        return;
+    }
 
     initUnaryInstr(&i, orig->type, &(orig->dst));
     applyStaticToInd(&(i.dst), es);
