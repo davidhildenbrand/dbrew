@@ -16,10 +16,11 @@ CFLAGS=-g -std=c99 -I../include -I../../include/priv -I../../include $(WFLAGS) \
 LDFLAGS = `$(LLVM_CONFIG) --ldflags` -g
 LDLIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` -lstdc++ -lm -lz -ldl -lpthread -ltinfo
 
-all: spmv
+all: spmv lifter
 
+lifter: lifter.c ../../libdbrew.a ../libdbrew-llvm.a
 spmv: spmv.c ../benchmark/timer.c ../../libdbrew.a ../libdbrew-llvm.a
 
 .PHONY: clean
 clean:
-	rm -f spmv
+	rm -f spmv lifter
