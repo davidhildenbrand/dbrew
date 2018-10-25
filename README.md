@@ -1,6 +1,6 @@
 # DBrew - a Library for Dynamic Binary Rewriting
 
-[![Build Status](https://travis-ci.org/lrr-tum/dbrew.svg?branch=master)](https://travis-ci.org/lrr-tum/dbrew)
+[![Build Status](https://travis-ci.org/caps-tum/dbrew.svg?branch=master)](https://travis-ci.org/caps-tum/dbrew)
 
 This library allows application-controlled, explicit rewriting of functions
 at runtime on the binary level. The rewritten functions can be used instead
