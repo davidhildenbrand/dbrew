@@ -50,7 +50,7 @@ libdbrew-llvm.a: $(OBJS_C) $(OBJS_CXX) $(HEADERS)
 	ar rcs $@ $(OBJS_C) $(OBJS_CXX)
 
 clean:
-	rm -f $(OBJS_C) $(OBJS_CXX) libdbrew-llvm.a $(TEST_TARGETS)
+	rm -f $(OBJS_C) $(OBJS_CXX) libdbrew-llvm.a $(TEST_TARGETS) test/*.o
 
 $(TEST_TARGETS): test_%: libdbrew-llvm.a test/%.o
 	$(CXX) $(CFLAGS) $(LDFLAGS) -o $@ test/$*.o libdbrew-llvm.a ../libdbrew.a $(LDLIBS)
