@@ -5,7 +5,6 @@ sources = [
   'llengine.c',
   'llflags.c',
   'llfunction.c',
-  'llinstr.c',
   'llinstruction-callret.c',
   'llinstruction-gp.c',
   'llinstruction-sse.c',
