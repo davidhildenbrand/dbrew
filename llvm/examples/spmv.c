@@ -62,29 +62,29 @@ spmv_asm:
     test r9, r9;
     lea rcx, [rdi + 16]; // rcx = ptr to current row entry
     lea rdi, [rdi + rax * 8 + 16]; // rdi = ptr to current value entry
-    jz 2f;
+    jz .Lspmv_asm_2;
 .align 0x10;
-1:
+.Lspmv_asm_1:
     mov rax, [rcx + 8];
     xorpd xmm0, xmm0;
     sub rax, [rcx]; // rax = number of value entries for current row
-    jz 3f;
+    jz .Lspmv_asm_3;
 .align 0x10;
-4:
+.Lspmv_asm_4:
     mov r10, [rdi];
     add rdi, 16;
     movsd xmm2, [rsi + 8 * r10];
     mulsd xmm2, [rdi - 8];
     sub rax, 1;
     addsd xmm0, xmm2;
-    jnz 4b;
-3:
+    jnz .Lspmv_asm_4;
+.Lspmv_asm_3:
     movsd [rdx + 8 * r8], xmm0;
     add rcx, 16;
     add r8, 1;
     cmp r8, r9;
-    jne 1b;
-2:
+    jne .Lspmv_asm_1;
+.Lspmv_asm_2:
     ret;
 );
 

@@ -35,12 +35,14 @@ TEST_CASE("/branch/simple", 02222, 0,
     ret;
 )
 TEST_CASE("/branch/middle", 02222, 0,
-    jmp 2f;
-  1:mov rdi, rsi;
+    jmp .L_branch_middle_2;
+  .L_branch_middle_1:
+    mov rdi, rsi;
     nop;
     add rdi, 1;
-  2:cmp rdi, rsi;
-    jb 1b;
+  .L_branch_middle_2:
+    cmp rdi, rsi;
+    jb .L_branch_middle_1;
     mov rax, rdi;
     ret;
 )
