@@ -42,6 +42,7 @@ LLBasicBlock* ll_basic_block_new(uintptr_t);
 LLBasicBlock* ll_basic_block_new_from_dbb(DBB*);
 LLBasicBlock* ll_basic_block_new_from_cbb(CBB*);
 void ll_basic_block_dispose(LLBasicBlock*);
+uintptr_t ll_basic_block_get_address(LLBasicBlock*);
 void ll_basic_block_declare(LLBasicBlock*, LLState*);
 void ll_basic_block_add_predecessor(LLBasicBlock*, LLBasicBlock*);
 void ll_basic_block_truncate(LLBasicBlock*, size_t);

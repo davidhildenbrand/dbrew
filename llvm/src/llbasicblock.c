@@ -214,6 +214,22 @@ ll_basic_block_dispose(LLBasicBlock* bb)
 }
 
 /**
+ * Gets the address of the basic block.
+ *
+ * \private
+ *
+ * \author Alexis Engelke
+ *
+ * \param bb The basic block
+ * \returns The address of the block
+ **/
+uintptr_t
+ll_basic_block_get_address(LLBasicBlock* bb)
+{
+    return bb->address;
+}
+
+/**
  * Declare a basic block in the current function.
  *
  * \private
