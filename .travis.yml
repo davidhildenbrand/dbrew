@@ -87,4 +87,4 @@ script:
   - mkdir build
   - meson build
   - ninja -v -C build
-  - ninja -v -C build test
+  - meson test -v -C build
