@@ -25,3 +25,22 @@ TEST_CASE_CMOV(cmovl)
 TEST_CASE_CMOV(cmovge)
 TEST_CASE_CMOV(cmovle)
 TEST_CASE_CMOV(cmovg)
+
+
+TEST_CASE("/branch/simple", 02222, 0,
+    cmp rdi, rsi;
+    jbe 1f;
+    mov rdi, rsi;
+  1:mov rax, rdi;
+    ret;
+)
+TEST_CASE("/branch/middle", 02222, 0,
+    jmp 2f;
+  1:mov rdi, rsi;
+    nop;
+    add rdi, 1;
+  2:cmp rdi, rsi;
+    jb 1b;
+    mov rax, rdi;
+    ret;
+)

@@ -163,9 +163,12 @@ ll_decode_basic_block_dedup(uintptr_t address, DecodeFunc decodeFunc, void* user
         LLBasicBlock* otherBB = state->currentFunction->u.definition.bbs[i];
         long index = ll_basic_block_find_address(otherBB, lastInstr->addr);
 
+        // If index >= 0, the last instruction is already part of another block.
+        // The new block only needs the instructions up to the beginning of the
+        // other block.
         if (otherBB != bb && index >= 0)
         {
-            ll_basic_block_truncate(bb, index + 1);
+            ll_basic_block_truncate(bb, dbb->count - (index + 1));
             ll_basic_block_add_branches(bb, NULL, otherBB);
 
             return bb;
