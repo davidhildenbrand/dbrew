@@ -88,3 +88,6 @@ script:
   - meson build
   - ninja -v -C build
   - meson test -v -C build
+  - ./build/llvm/test/dbrewllvm_test_correctness --verbose -k -p=/instr/neg/64 --seed=R02See7044edc75d4b0f923ee336cb3c31c9
+  - ./build/llvm/test/dbrewllvm_test_correctness --verbose -k -p=/instr/neg/64 --seed=R02S88f762c13fe8ceabbee13c9cb9c07306
+  - ./build/llvm/test/dbrewllvm_test_correctness -k --seed=R02Sfd5b41b3634950535ebf153321be631b

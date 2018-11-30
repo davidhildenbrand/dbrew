@@ -120,6 +120,8 @@ test_compare_output(gconstpointer userdata)
                 uint64_t rand = ((size_t) g_test_rand_int() << 32) | g_test_rand_int();
                 i64_1 = ((uint64_t(*)(uint64_t))fn)(rand);
                 i64_2 = ((uint64_t(*)(uint64_t))testFunc->function)(rand);
+                if (i64_1 != i64_2)
+                    g_message("%llu %llu\n", i64_1, i64_2);
                 g_assert_cmpuint(i64_1, ==, i64_2);
             }
             break;
