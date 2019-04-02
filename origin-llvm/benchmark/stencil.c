@@ -7,6 +7,7 @@
 #include <dbrew.h>
 #include <dbrew-llvm.h>
 #include <dbrew-backend.h>
+#include <drob.h>
 
 #include "stencil-kernels.h"
 #include "timer.h"
@@ -118,6 +119,7 @@ enum BenchmarkMode {
     BENCHMARK_LLVM_FIXED,
     BENCHMARK_DBREW_LLVM,
     BENCHMARK_DBREW_LLVM_TWICE,
+    BENCHMARK_DROB,
 
     BENCHMARK_MAX_MODE
 };
@@ -295,6 +297,42 @@ benchmark_run2(const BenchmarkArgs* args)
             assert(llfn != NULL);
             break;
 
+        case BENCHMARK_DROB: {
+            int ret = 0;
+            drob_cfg *cfg = NULL;
+
+            cfg = drob_cfg_new4(DROB_PARAM_TYPE_VOID, DROB_PARAM_TYPE_PTR,
+                                DROB_PARAM_TYPE_PTR, DROB_PARAM_TYPE_PTR,
+                                DROB_PARAM_TYPE_UINT64);
+            if (!cfg) {
+                fprintf(stderr, "DROB config could not be created\n");
+                exit(-1);
+            }
+            drob_cfg_fail_on_unmodelled(cfg, true);
+            drob_cfg_set_error_handling(cfg, DROB_ERROR_HANDLING_ABORT);
+            ret |= drob_cfg_set_param_ptr(cfg, 0, arg0);
+            ret |= drob_cfg_set_ptr_flag(cfg, 0, DROB_PTR_FLAG_CONST);
+            ret |= drob_cfg_set_ptr_flag(cfg, 1, DROB_PTR_FLAG_RESTRICT);
+            ret |= drob_cfg_set_ptr_flag(cfg, 1, DROB_PTR_FLAG_NOTNULL);
+            ret |= drob_cfg_set_ptr_flag(cfg, 2, DROB_PTR_FLAG_RESTRICT);
+            ret |= drob_cfg_set_ptr_flag(cfg, 2, DROB_PTR_FLAG_NOTNULL);
+            if (args->datatype == DATA_SORTED) {
+                /*
+                 * As an alternative, simply put it into a RO memory region.
+                 */
+                ret |= drob_cfg_add_const_range(cfg, &s5, sizeof(s5) +
+                                                4 * sizeof(s5.p[0]));
+            }
+            if (ret) {
+                fprintf(stderr, "DROB config could not be modified\n");
+                exit(-1);
+            }
+
+            processedFunction = (uintptr_t) drob_optimize((void *) baseFunction, cfg);
+            drob_cfg_free(cfg);
+            break;
+        }
+
         default:
             abort();
     }
@@ -360,6 +398,10 @@ benchmark_run2(const BenchmarkArgs* args)
 
     if (r != NULL)
         dbrew_free(r);
+
+    if (args->mode == BENCHMARK_DROB) {
+        drob_free((drob_f)processedFunction);
+    }
 }
 
 int
@@ -395,12 +437,19 @@ main(int argc, char** argv)
 
     size_t iterationCount = atoi(argv[4]);
 
+    if (args.mode == BENCHMARK_DROB) {
+        drob_setup();
+    }
+
     for (size_t i = 0; i < iterationCount; i++)
     {
         benchmark_run2(&args);
         args.decodeGenerated = false;
     }
 
+    if (args.mode == BENCHMARK_DROB) {
+        drob_teardown();
+    }
 
     return 0;
 }
