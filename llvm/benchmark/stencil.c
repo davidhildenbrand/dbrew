@@ -7,7 +7,7 @@
 #include <dbrew.h>
 #include <dbrew-llvm.h>
 
-#include "kernels.h"
+#include "stencil-kernels.h"
 #include "timer.h"
 
 
@@ -186,6 +186,7 @@ void* const kernel_args[DATA_MAX] = {
 #define KERNEL(data,gran) kernels[(data)*GRAN_MAX + (gran)]
 #define KERNEL_NAME(data,gran) kernel_names[(data)*GRAN_MAX + (gran)]
 
+static
 Rewriter*
 benchmark_init_dbrew(StencilGranularity granularity)
 {
@@ -194,7 +195,7 @@ benchmark_init_dbrew(StencilGranularity granularity)
     dbrew_optverbose(r, false);
     dbrew_set_decoding_capacity(r, 100000, 100);
     dbrew_set_capture_capacity(r, 100000, 100, 10000);
-    
+
     switch (granularity)
     {
         case GRAN_ELEM:
@@ -206,6 +207,8 @@ benchmark_init_dbrew(StencilGranularity granularity)
         case GRAN_MATRIX:
             dbrew_set_function(r, (uintptr_t) stencil_matrix_dbrew);
             break;
+        default:
+            abort();
     }
 
     dbrew_config_staticpar(r, 0);
@@ -237,7 +240,7 @@ benchmark_run2(const BenchmarkArgs* args)
     Rewriter* r = NULL;
 
     uintptr_t baseFunction = (uintptr_t) KERNEL(args->datatype, args->granularity);
-    uintptr_t processedFunction;
+    uintptr_t processedFunction = 0;
 
     JTimer timerCompile = {0}, timerRun = {0};
 
@@ -292,7 +295,7 @@ benchmark_run2(const BenchmarkArgs* args)
             break;
 
         default:
-            assert(0);
+            abort();
     }
 
     if (args->mode == BENCHMARK_LLVM || args->mode == BENCHMARK_LLVM_FIXED || args->mode == BENCHMARK_DBREW_LLVM_TWICE)
@@ -338,6 +341,8 @@ benchmark_run2(const BenchmarkArgs* args)
             for (size_t runs = 0; runs < args->runCount; runs++)
                 compute_jacobi_matrix(arg0, (StencilMatrixFunction) processedFunction, arg1, arg2);
             break;
+        default:
+            abort();
     }
     __asm__ volatile("" ::: "memory");
     JTimerStop(&timerRun);

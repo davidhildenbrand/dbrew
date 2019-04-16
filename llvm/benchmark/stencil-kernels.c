@@ -1,7 +1,7 @@
 
 #include <stdint.h>
 
-#include "kernels.h"
+#include "stencil-kernels.h"
 
 inline
 void
