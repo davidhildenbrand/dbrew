@@ -116,7 +116,11 @@ extern "C"
 void
 ll_support_enable_fast_math(LLVMValueRef value)
 {
+#if LL_LLVM_MAJOR >= 6
+    llvm::unwrap<llvm::Instruction>(value)->setFast(true);
+#else
     llvm::unwrap<llvm::Instruction>(value)->setHasUnsafeAlgebra(true);
+#endif
 }
 
 /**
