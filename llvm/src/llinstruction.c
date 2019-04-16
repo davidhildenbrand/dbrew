@@ -113,9 +113,9 @@ static const ConversionDescriptor descriptors[IT_Max] = {
     [IT_TEST] = CD_FUNCTION(ll_instruction_test),
     [IT_IMUL] = CD_FUNCTION(ll_instruction_mul),
     [IT_MUL] = CD_FUNCTION(ll_instruction_mul),
-    [IT_SHL] = CD_BINARY_INT_LLVM(LLVMBuildShl, ll_flags_set_shl),
-    [IT_SHR] = CD_BINARY_INT_LLVM(LLVMBuildLShr, ll_flags_set_shr),
-    [IT_SAR] = CD_BINARY_INT_LLVM(LLVMBuildAShr, ll_flags_set_sar),
+    [IT_SHL] = CD_FUNCTION(ll_instruction_shift),
+    [IT_SHR] = CD_FUNCTION(ll_instruction_shift),
+    [IT_SAR] = CD_FUNCTION(ll_instruction_shift),
     [IT_CLTQ] = CD_FUNCTION(ll_instruction_cdqe),
 
     [IT_CMOVO] = CD_FUNCTION(ll_instruction_cmov),

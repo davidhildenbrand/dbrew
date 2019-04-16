@@ -185,6 +185,56 @@ ll_instruction_incdec(LLInstr* instr, LLState* state)
 }
 
 void
+ll_instruction_shift(LLInstr* instr, LLState* state)
+{
+    LLVMValueRef operand1 = ll_operand_load(OP_SI, ALIGN_MAXIMUM, &instr->dst, state);
+    LLVMValueRef operand2;
+    LLVMValueRef result = NULL;
+
+    if (instr->form == OF_1)
+    {
+        // DBrew decodes shifts with a implicit shift of 1 with only one operand
+        operand2 = LLVMConstInt(LLVMTypeOf(operand1), 1, false);
+    }
+    else
+    {
+        operand2 = ll_operand_load(OP_SI, ALIGN_MAXIMUM, &instr->src, state);
+        // In x86, the second operand is always one byte, but in LLVM it must
+        // have the same type as the first operand.
+        operand2 = LLVMBuildZExtOrBitCast(state->builder, operand2, LLVMTypeOf(operand1), "");
+
+        // x86 also masks the shift operands, depending on operand size. Note
+        // that for 8/16-bit operands the mask is 0x1f as well.
+        uint64_t mask_value = 0x3f;
+        if (LLVMGetIntTypeWidth(LLVMTypeOf(operand1)) != 64)
+        {
+            mask_value = 0x1f;
+        }
+
+        LLVMValueRef mask = LLVMConstInt(LLVMTypeOf(operand1), mask_value, false);
+        operand2 = LLVMBuildAnd(state->builder, operand2, mask, "");
+    }
+
+    if (instr->type == IT_SHL)
+    {
+        result = LLVMBuildShl(state->builder, operand1, operand2, "");
+        ll_flags_set_shl(state, result, operand1, operand2);
+    }
+    else if (instr->type == IT_SHR)
+    {
+        result = LLVMBuildLShr(state->builder, operand1, operand2, "");
+        ll_flags_set_shr(state, result, operand1, operand2);
+    }
+    else if (instr->type == IT_SAR)
+    {
+        result = LLVMBuildAShr(state->builder, operand1, operand2, "");
+        ll_flags_set_sar(state, result, operand1, operand2);
+    }
+
+    ll_operand_store(OP_SI, ALIGN_MAXIMUM, &instr->dst, REG_DEFAULT, result, state);
+}
+
+void
 ll_instruction_mul(LLInstr* instr, LLState* state)
 {
     LLVMValueRef operand1;

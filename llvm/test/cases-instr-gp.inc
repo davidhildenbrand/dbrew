@@ -245,6 +245,19 @@ TEST_CASE("/instr/cmp/flags", 02222, 0,
 )
 
 
+TEST_CASE("/instr/shr1/64", 0221, 0,
+    mov rax, rdi;
+    shr rax;
+    ret;
+)
+TEST_CASE("/instr/shr2/64/reg", 02222, 0,
+    mov ecx, esi;
+    mov rax, rdi;
+    shr rax, cl;
+    ret;
+)
+
+
 TEST_CASE("/instr/mul/64", 02222, 0,
     mov rax, rdi;
     mul rsi;

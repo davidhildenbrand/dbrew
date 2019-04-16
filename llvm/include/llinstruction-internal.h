@@ -41,6 +41,7 @@ void ll_instruction_cmp(LLInstr*, LLState*);
 void ll_instruction_test(LLInstr*, LLState*);
 void ll_instruction_notneg(LLInstr*, LLState*);
 void ll_instruction_incdec(LLInstr*, LLState*);
+void ll_instruction_shift(LLInstr*, LLState*);
 void ll_instruction_mul(LLInstr*, LLState*);
 void ll_instruction_rotate(LLInstr*, LLState*);
 void ll_instruction_lea(LLInstr*, LLState*);
