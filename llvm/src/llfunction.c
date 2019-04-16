@@ -376,7 +376,7 @@ ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_
         fixed = LLVMBuildPointerCast(state->builder, global, paramTypes[index], "");
     }
     else
-        fixed = LLVMConstIntToPtr(LLVMConstInt(i64, value, false), paramTypes[index]);
+        fixed = LLVMConstBitCast(LLVMConstInt(i64, value, false), paramTypes[index]);
 
     for (uintptr_t i = 0; i < paramCount; i++)
     {
