@@ -1,6 +1,6 @@
 
 # Can (and should) be specified via the command line.
-SUBDIRS=examples llvm
+SUBDIRS=examples
 
 WFLAGS_BASE=-Wall -Wextra -Wmissing-field-initializers -Wunused-parameter \
             -Wold-style-definition -Wmissing-declarations -Wmissing-prototypes \
