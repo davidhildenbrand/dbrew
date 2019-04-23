@@ -1147,6 +1147,7 @@ void setMemValue(EmuValue* v, EmuValue* addr, EmuState* es, ValType t,
     case VT_16:
         a16 = (uint16_t*) addr->val;
         *a16 = (uint16_t) v->val;
+        break;
 
     case VT_32:
         a32 = (uint32_t*) addr->val;

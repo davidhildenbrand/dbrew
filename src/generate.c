@@ -715,7 +715,8 @@ int genMov(GContext* cxt)
                 // use 'movsx r64,r/m 32' (0x63)
                 return genModRM(cxt, 0x63, &eSrc, dst, VT_None, 0);
             }
-            // fall through for regular 'mov r,r' with same operand sizes
+            // for regular 'mov r,r' with same operand sizes
+            // fall through
         case OT_Ind32:
         case OT_Ind64:
             if (opValType(src) != opValType(dst)) return -1;

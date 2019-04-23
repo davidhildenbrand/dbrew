@@ -723,7 +723,7 @@ void markDecodeError(DContext* c, bool showDigit, ErrorType et)
     case ET_BadPrefix:
         o = sprintf(buf, "unsupported prefix for opcode"); break;
     case ET_BadOperands:
-        o = sprintf(buf, "unsupported operand size for opcode");
+        o = sprintf(buf, "unsupported operand size for opcode"); break;
     default:
         assert(0); // should never happen
     }
