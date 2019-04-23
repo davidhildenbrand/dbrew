@@ -188,7 +188,7 @@ Error* emulateAndCapture(Rewriter* r, int parCount, uint64_t* par)
     EmuState* es;
     DBB *dbb;
     CBB *cbb;
-    Instr* instr;
+    Instr* instr = NULL;
     uint64_t bb_addr, nextbb_addr;
     RContext cxt;
 
@@ -228,7 +228,7 @@ Error* emulateAndCapture(Rewriter* r, int parCount, uint64_t* par)
     cbb = (esID >= 0) ? getCaptureBB(&cxt, r->func, esID) : 0;
     if (cxt.e) return cxt.e;
     // new CBB has to be first in this rewriter (we start with it in Pass 2)
-    assert(cbb = r->capBB);
+    assert(cbb == r->capBB);
     pushCaptureBB(&cxt, cbb);
     if (cxt.e) return cxt.e;
     assert(r->capStackTop == 0);

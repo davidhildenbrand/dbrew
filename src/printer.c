@@ -393,7 +393,7 @@ char* op2string(Operand* o, Instr* instr, FunctionConfig* fc)
             val += instr->addr + instr->len;
         }
         if (val != 0) {
-            if (val & (1l<<63))
+            if (val & (1ul<<63))
                 off += sprintf(buf+off, "-0x%lx", (~val)+1);
             else
                 off += sprintf(buf+off, "%s", prettyAddress(val, fc));

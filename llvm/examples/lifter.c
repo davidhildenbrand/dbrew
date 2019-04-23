@@ -14,6 +14,7 @@
 #include <dbrew-llvm.h>
 
 
+static
 float
 sample_func(size_t n, float* arr)
 {
@@ -37,8 +38,9 @@ main(void)
         .signature = 00262, // float (i64, i8*)
     };
 
-    // Decod function and lift to LLVM IR
+    // Decode function and lift to LLVM IR
     LLFunction* fn = ll_decode_function((uintptr_t) sample_func, (DecodeFunc) dbrew_decode, r, &config, state);
+    (void) fn;
 
     // Run optimization passes
     ll_engine_optimize(state, 3);
