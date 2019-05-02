@@ -33,8 +33,8 @@
 #include <dbrew-llvm.h>
 
 
-#define MMAP_ADDR1 0x100000000
-#define MMAP_ADDR2 0x200000000
+#define MMAP_ADDR1 0x302000
+#define MMAP_ADDR2 0x304000
 
 enum TestFlags {
     /**
