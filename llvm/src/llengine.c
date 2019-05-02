@@ -236,7 +236,9 @@ ll_engine_dispose(LLState* state)
     // LLVMDisposeModule(state->module);
     LLVMDisposeBuilder(state->builder);
     LLVMDisposeExecutionEngine(state->engine);
-    LLVMContextDispose(state->context);
+    // Disposing the context sometimes crashes LLVM (v6). Valgrind complains
+    // about use-after-free and double-free errors...
+    // LLVMContextDispose(state->context);
 
     free(state);
 }
