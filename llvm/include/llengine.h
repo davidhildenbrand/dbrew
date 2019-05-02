@@ -28,25 +28,18 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#include <dbrew.h>
+// #include <dbrew.h>
 
-#include <llcommon.h>
+struct LLEngine;
 
+typedef struct LLEngine LLEngine;
 
-LLState* ll_engine_init(void);
-LLState* ll_engine_init_from_bc_file(char*);
-void ll_engine_dispose(LLState*);
+LLEngine* ll_engine_init(void);
+LLEngine* ll_engine_init_from_bc_file(char*);
+void ll_engine_dispose(LLEngine*);
 
-void ll_engine_enable_overflow_intrinsics(LLState*, bool);
-void ll_engine_enable_fast_math(LLState*, bool);
-void ll_engine_enable_full_loop_unroll(LLState*, bool);
-
-// bool ll_engine_handle_function(LLState*, LLFunction*);
-void ll_engine_optimize(LLState*, int);
-void ll_engine_dump(LLState*);
-void ll_engine_disassemble(LLState*);
-
-void dbrew_llvm_backend(Rewriter*);
-uintptr_t dbrew_llvm_rewrite(Rewriter*, ...);
+void ll_engine_optimize(LLEngine*, int);
+void ll_engine_dump(LLEngine*);
+void ll_engine_disassemble(LLEngine*);
 
 #endif

@@ -24,19 +24,20 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <llvm-c/Analysis.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/Support.h>
 
+#include <llbasicblock.h>
+#include <lldecoder.h>
+
 #include <llfunction.h>
 #include <llfunction-internal.h>
 
-#include <llbasicblock-internal.h>
-#include <llcommon.h>
-#include <llcommon-internal.h>
-#include <lloperand-internal.h>
-#include <llsupport-internal.h>
+#include <llengine.h>
+#include <llengine-internal.h>
 
 /**
  * \defgroup LLFunction Function
@@ -44,6 +45,13 @@
  *
  * @{
  **/
+
+static LLVMAttributeRef
+ll_support_get_enum_attr(LLVMContextRef context, const char* name)
+{
+    unsigned id = LLVMGetEnumAttributeKindForName(name, strlen(name));
+    return LLVMCreateEnumAttribute(context, id, 0);
+}
 
 /**
  * Helper function to allocate a function.
@@ -58,7 +66,7 @@
  * \returns The declared function
  **/
 static LLFunction*
-ll_function_new(LLFunctionKind kind, uintptr_t address, LLState* state)
+ll_function_new(LLFunctionKind kind, uintptr_t address, LLEngine* state)
 {
     LLFunction* function;
 
@@ -89,8 +97,8 @@ ll_function_new(LLFunctionKind kind, uintptr_t address, LLState* state)
     return function;
 }
 
-static LLVMValueRef
-ll_function_declare_llvm(uint64_t packedType, const char* name, LLState* state)
+static LLVMTypeRef
+ll_function_unpack_type(uint64_t packedType, uint64_t* out_noalias_params, LLEngine* state)
 {
     LLVMTypeRef i8 = LLVMInt8TypeInContext(state->context);
     LLVMTypeRef i64 = LLVMInt64TypeInContext(state->context);
@@ -140,20 +148,22 @@ ll_function_declare_llvm(uint64_t packedType, const char* name, LLState* state)
         tmp = tmp >> 3;
     }
 
-    LLVMTypeRef fnType = LLVMFunctionType(types[0], types + 1, paramCount, false);
-    LLVMValueRef function = LLVMAddFunction(state->module, name, fnType);
+    if (out_noalias_params)
+        *out_noalias_params = noaliasParams;
 
-    if (noaliasParams != 0)
+    return LLVMFunctionType(types[0], types + 1, paramCount, false);
+}
+
+static void
+ll_function_apply_noalias(LLVMValueRef llvmFn, uint64_t noaliasParams, LLEngine* state)
+{
+    uint32_t paramCount = LLVMCountParams(llvmFn);
+    LLVMAttributeRef noaliasAttr = ll_support_get_enum_attr(state->context, "noalias");
+    for (size_t i = 0; i < paramCount; i++)
     {
-        LLVMAttributeRef noaliasAttr = ll_support_get_enum_attr(state->context, "noalias");
-        for (size_t i = 0; i < paramCount; i++)
-        {
-            if (noaliasParams & (1 << i))
-                LLVMAddAttributeAtIndex(function, i + 1, noaliasAttr);
-        }
+        if (noaliasParams & (1 << i))
+            LLVMAddAttributeAtIndex(llvmFn, i + 1, noaliasAttr);
     }
-
-    return function;
 }
 
 /**
@@ -171,11 +181,15 @@ ll_function_declare_llvm(uint64_t packedType, const char* name, LLState* state)
  * \returns The declared function
  **/
 LLFunction*
-ll_function_declare(uintptr_t address, uint64_t type, const char* name, LLState* state)
+ll_function_declare(uintptr_t address, uint64_t type, const char* name, LLEngine* state)
 {
+    uint64_t noaliasParams;
+    LLVMTypeRef fnty = ll_function_unpack_type(type, &noaliasParams, state);
     LLFunction* function = ll_function_new(LL_FUNCTION_DECLARATION, address, state);
     function->name = name;
-    function->llvmFunction = ll_function_declare_llvm(type, name, state);
+    function->llvmFunction = LLVMAddFunction(state->module, name, fnty);
+
+    ll_function_apply_noalias(function->llvmFunction, noaliasParams, state);
 
     bool isIntrinsic = false;
     bool isSymbol = false;
@@ -208,96 +222,30 @@ ll_function_declare(uintptr_t address, uint64_t type, const char* name, LLState*
  * \returns The defined function
  **/
 LLFunction*
-ll_function_new_definition(uintptr_t address, LLConfig* config, LLState* state)
+ll_function_new_definition(uintptr_t address, LLFunctionConfig* config, LLEngine* state)
 {
     LLFunction* function = ll_function_new(LL_FUNCTION_DEFINITION, address, state);
+    LLVMTypeRef fnty = ll_function_unpack_type(config->signature, &function->noaliasParams, state);
     function->name = config->name;
-    function->u.definition.bbCount = 0;
-    function->u.definition.bbs = NULL;
-    function->u.definition.bbsAllocated = 0;
-    function->u.definition.stackSize = config->stackSize;
-
-    state->currentFunction = function;
-
-    LLVMTypeRef i1 = LLVMInt1TypeInContext(state->context);
-    LLVMTypeRef i8 = LLVMInt8TypeInContext(state->context);
-    LLVMTypeRef i64 = LLVMInt64TypeInContext(state->context);
-    LLVMTypeRef iVec = LLVMIntTypeInContext(state->context, LL_VECTOR_REGISTER_SIZE);
-
-    // Construct function type and add a new function to the module
-    function->llvmFunction = ll_function_declare_llvm(config->signature, function->name, state);
-    size_t paramCount = LLVMCountParams(function->llvmFunction);
-
-    if (config->private)
-        LLVMSetLinkage(function->llvmFunction, LLVMPrivateLinkage);
-
-    LLBasicBlock* initialBB = ll_basic_block_new(function->address);
-    ll_basic_block_declare(initialBB, state);
-    state->currentBB = initialBB;
-
-    // Position IR builder at a new basic block in the function
-    LLVMPositionBuilderAtEnd(state->builder, ll_basic_block_llvm(initialBB));
-
-    // Iterate over the parameters to initialize the registers.
-    LLVMValueRef params = LLVMGetFirstParam(function->llvmFunction);
-
-    // Set all registers to undef first.
-    for (int i = 0; i < RI_GPMax; i++)
-        ll_set_register(getReg(RT_GP64, i), FACET_I64, LLVMGetUndef(i64), true, state);
-
-    for (int i = 0; i < RI_XMMMax; i++)
-        ll_set_register(getReg(RT_XMM, i), FACET_IVEC, LLVMGetUndef(iVec), true, state);
-
-    for (int i = 0; i < RFLAG_Max; i++)
-        ll_basic_block_set_flag(initialBB, i, LLVMGetUndef(i1));
-
-
-    Reg gpRegs[6] = {
-        getReg(RT_GP64, RI_DI),
-        getReg(RT_GP64, RI_SI),
-        getReg(RT_GP64, RI_D),
-        getReg(RT_GP64, RI_C),
-        getReg(RT_GP64, RI_8),
-        getReg(RT_GP64, RI_9),
-    };
-    int gpRegOffset = 0;
-    int fpRegOffset = 0;
-    for (size_t i = 0; i < paramCount; i++)
-    {
-        LLVMTypeKind paramTypeKind = LLVMGetTypeKind(LLVMTypeOf(params));
-
-        if (paramTypeKind == LLVMPointerTypeKind)
-        {
-            LLVMValueRef intValue = LLVMBuildPtrToInt(state->builder, params, i64, "");
-            ll_operand_store(OP_SI, ALIGN_MAXIMUM, getRegOp(gpRegs[gpRegOffset++]), REG_DEFAULT, intValue, state);
-        }
-        else if (paramTypeKind == LLVMIntegerTypeKind)
-            ll_operand_store(OP_SI, ALIGN_MAXIMUM, getRegOp(gpRegs[gpRegOffset++]), REG_DEFAULT, params, state);
-        else if (paramTypeKind == LLVMFloatTypeKind)
-            ll_operand_store(OP_SF32, ALIGN_MAXIMUM, getRegOp(getReg(RT_XMM, RI_XMM0 + (fpRegOffset++))), REG_ZERO_UPPER_SSE, params, state);
-        else if (paramTypeKind == LLVMDoubleTypeKind)
-            ll_operand_store(OP_SF64, ALIGN_MAXIMUM, getRegOp(getReg(RT_XMM, RI_XMM0 + (fpRegOffset++))), REG_ZERO_UPPER_SSE, params, state);
-        else
-            warn_if_reached();
-
-        params = LLVMGetNextParam(params);
-    }
-
-    // Setup virtual stack
-    LLVMValueRef stackSize = LLVMConstInt(i64, config->stackSize, false);
-    LLVMValueRef stack = LLVMBuildArrayAlloca(state->builder, i8, stackSize, "");
-    LLVMValueRef sp = LLVMBuildGEP(state->builder, stack, &stackSize, 1, "");
-    ll_basic_block_set_register(initialBB, FACET_PTR, getReg(RT_GP64, RI_SP), sp, true, state);
-
-    LLVMSetAlignment(stack, 16);
-
-    function->u.definition.initialBB = initialBB;
-
+    function->func = ll_func(config->name, fnty, state->module);
+    ll_func_enable_fast_math(function->func, config->fastMath);
+    ll_func_enable_full_loop_unroll(function->func, config->forceLoopUnroll);
+    ll_func_set_global_base(function->func, 0x1000, state->globalBase);
     return function;
 }
 
 LLFunction*
-ll_function_wrap_external(const char* name, LLState* state)
+ll_decode_function(uintptr_t address, LLFunctionConfig* config, LLEngine* state)
+{
+    LLFunction* function = ll_function_new_definition(address, config, state);
+    ll_func_decode(function->func, address);
+    function->llvmFunction = ll_func_lift(function->func);
+    ll_function_apply_noalias(function->llvmFunction, function->noaliasParams, state);
+    return function;
+}
+
+LLFunction*
+ll_function_wrap_external(const char* name, LLEngine* state)
 {
     LLVMValueRef llvmFunction = LLVMGetNamedFunction(state->module, name);
 
@@ -331,8 +279,10 @@ ll_function_wrap_external(const char* name, LLState* state)
  * \returns The specialized function
  **/
 LLFunction*
-ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_t length, LLState* state)
+ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_t length, LLEngine* state)
 {
+    LLVMBuilderRef builder = LLVMCreateBuilderInContext(state->context);
+
     LLFunction* function = ll_function_new(LL_FUNCTION_SPECIALIZATION, 0, state);
     function->name = base->name;
 
@@ -373,7 +323,7 @@ ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_
         LLVMSetLinkage(global, LLVMPrivateLinkage);
         LLVMSetInitializer(global, LLVMConstArray(arrayType, qwords, length / 8));
 
-        fixed = LLVMBuildPointerCast(state->builder, global, paramTypes[index], "");
+        fixed = LLVMBuildPointerCast(builder, global, paramTypes[index], "");
     }
     else
         fixed = LLVMConstBitCast(LLVMConstInt(i64, value, false), paramTypes[index]);
@@ -394,14 +344,16 @@ ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_
     }
 
     LLVMBasicBlockRef llvmBB = LLVMAppendBasicBlock(function->llvmFunction, "");
-    LLVMPositionBuilderAtEnd(state->builder, llvmBB);
+    LLVMPositionBuilderAtEnd(builder, llvmBB);
 
-    LLVMValueRef retValue = LLVMBuildCall(state->builder, base->llvmFunction, args, paramCount, "");
+    LLVMValueRef retValue = LLVMBuildCall(builder, base->llvmFunction, args, paramCount, "");
 
     if (LLVMGetTypeKind(LLVMGetReturnType(fnType)) != LLVMVoidTypeKind)
-        LLVMBuildRet(state->builder, retValue);
+        LLVMBuildRet(builder, retValue);
     else
-        LLVMBuildRetVoid(state->builder);
+        LLVMBuildRetVoid(builder);
+
+    LLVMDisposeBuilder(builder);
 
     return function;
 }
@@ -419,13 +371,7 @@ ll_function_dispose(LLFunction* function)
     switch (function->kind)
     {
         case LL_FUNCTION_DEFINITION:
-            if (function->u.definition.bbsAllocated != 0)
-            {
-                for (size_t i = 0; i < function->u.definition.bbCount; i++)
-                    ll_basic_block_dispose(function->u.definition.bbs[i]);
-
-                free(function->u.definition.bbs);
-            }
+            ll_func_dispose(function->func);
             break;
         case LL_FUNCTION_DECLARATION:
         case LL_FUNCTION_SPECIALIZATION:
@@ -454,95 +400,6 @@ ll_function_dump(LLFunction* function)
 }
 
 /**
- * Add a basic block to the function. Only valid for defined functions, where
- * the IR is not built yet.
- *
- * \private
- *
- * \author Alexis Engelke
- *
- * \param function The function
- * \param bb The basic block to add
- **/
-void
-ll_function_add_basic_block(LLFunction* function, LLBasicBlock* bb)
-{
-    if (function->kind != LL_FUNCTION_DEFINITION)
-        warn_if_reached();
-
-    if (function->u.definition.bbsAllocated == 0)
-    {
-        function->u.definition.bbs = malloc(sizeof(LLBasicBlock*) * 10);
-        function->u.definition.bbsAllocated = 10;
-
-        if (function->u.definition.bbs == NULL)
-            warn_if_reached();
-
-        ll_basic_block_add_predecessor(bb, function->u.definition.initialBB);
-    }
-    else if (function->u.definition.bbsAllocated == function->u.definition.bbCount)
-    {
-        function->u.definition.bbs = realloc(function->u.definition.bbs, sizeof(LLBasicBlock*) * function->u.definition.bbsAllocated * 2);
-        function->u.definition.bbsAllocated *= 2;
-
-        if (function->u.definition.bbs == NULL)
-            warn_if_reached();
-    }
-
-    function->u.definition.bbs[function->u.definition.bbCount] = bb;
-    function->u.definition.bbCount++;
-}
-
-/**
- * Build the IR for a defined function. This function must be called at most
- * once.
- *
- * \private
- *
- * \author Alexis Engelke
- *
- * \param function The function
- * \param state The module state
- * \returns Whether there was an error while generating the IR
- **/
-bool
-ll_function_build_ir(LLFunction* function, LLState* state)
-{
-    switch (function->kind)
-    {
-        case LL_FUNCTION_DEFINITION:
-            {
-                size_t bbCount = function->u.definition.bbCount;
-
-                state->currentFunction = function;
-
-                for (size_t i = 0; i < bbCount; i++)
-                    ll_basic_block_declare(function->u.definition.bbs[i], state);
-
-                LLVMPositionBuilderAtEnd(state->builder, ll_basic_block_llvm(function->u.definition.initialBB));
-                LLVMBuildBr(state->builder, ll_basic_block_llvm(function->u.definition.bbs[0]));
-
-                for (size_t i = 0; i < bbCount; i++)
-                    ll_basic_block_build_ir(function->u.definition.bbs[i], state);
-
-                for (size_t i = 0; i < bbCount; i++)
-                    ll_basic_block_fill_phis(function->u.definition.bbs[i], state);
-            }
-            break;
-        case LL_FUNCTION_DECLARATION:
-        case LL_FUNCTION_SPECIALIZATION:
-        case LL_FUNCTION_EXTERNAL:
-            break;
-        default:
-            warn_if_reached();
-    }
-
-    bool error = LLVMVerifyFunction(function->llvmFunction, LLVMPrintMessageAction);
-
-    return error;
-}
-
-/**
  * Compile a function after generating the IR.
  *
  * \author Alexis Engelke
@@ -552,7 +409,7 @@ ll_function_build_ir(LLFunction* function, LLState* state)
  * \returns A pointer to the function
  **/
 void*
-ll_function_get_pointer(LLFunction* function, LLState* state)
+ll_function_get_pointer(LLFunction* function, LLEngine* state)
 {
     return LLVMGetPointerToGlobal(state->engine, function->llvmFunction);
 }

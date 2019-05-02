@@ -6,6 +6,8 @@
 
 #include <dbrew.h>
 #include <dbrew-llvm.h>
+#include <dbrew-backend.h>
+#include <dbrew-decoder.h>
 
 #include "stencil-kernels.h"
 #include "timer.h"
@@ -229,13 +231,14 @@ benchmark_run2(const BenchmarkArgs* args)
     double* arg2;
     init_matrix(&arg1, &arg2);
 
-    LLConfig llconfig = {
+    LLFunctionConfig llconfig = {
         .name = "test",
         .stackSize = 128,
+        .fastMath = true,
         .signature = 0211114,
     };
 
-    LLState* state = NULL;
+    LLEngine* state = NULL;
     LLFunction* llfn = NULL;
     Rewriter* r = NULL;
 
@@ -257,7 +260,6 @@ benchmark_run2(const BenchmarkArgs* args)
     if (args->mode == BENCHMARK_LLVM || args->mode == BENCHMARK_LLVM_FIXED || args->mode == BENCHMARK_DBREW_LLVM_TWICE)
     {
         state = ll_engine_init();
-        ll_engine_enable_fast_math(state, true);
     }
 
     switch (args->mode)
@@ -275,12 +277,12 @@ benchmark_run2(const BenchmarkArgs* args)
             break;
 
         case BENCHMARK_LLVM:
-            llfn = ll_decode_function(baseFunction, (DecodeFunc) dbrew_decode, r, &llconfig, state);
+            llfn = ll_decode_function(baseFunction, &llconfig, state);
             assert(llfn != NULL);
             break;
 
         case BENCHMARK_LLVM_FIXED:
-            llfn = ll_decode_function(baseFunction, (DecodeFunc) dbrew_decode, r, &llconfig, state);
+            llfn = ll_decode_function(baseFunction, &llconfig, state);
             assert(llfn != NULL);
 
             if (arg0 != NULL)
@@ -290,7 +292,7 @@ benchmark_run2(const BenchmarkArgs* args)
         case BENCHMARK_DBREW_LLVM_TWICE:
             processedFunction = dbrew_llvm_rewrite(r, arg0, arg1, arg2, 20, KERNEL(args->datatype, GRAN_ELEM));
 
-            llfn = ll_decode_function(processedFunction, (DecodeFunc) dbrew_decode, r, &llconfig, state);
+            llfn = ll_decode_function(processedFunction, &llconfig, state);
             assert(llfn != NULL);
             break;
 
@@ -311,18 +313,18 @@ benchmark_run2(const BenchmarkArgs* args)
     JTimerStop(&timerCompile);
     __asm__ volatile("" ::: "memory");
 
-    if (args->decodeGenerated)
-    {
-        if (state == NULL)
-            state = ll_engine_init();
+    // if (args->decodeGenerated)
+    // {
+    //     if (state == NULL)
+    //         state = ll_engine_init();
 
-        if (r == NULL)
-            r = benchmark_init_dbrew(true);
+    //     if (r == NULL)
+    //         r = benchmark_init_dbrew(true);
 
-        // Print out decoded assembly.
-        dbrew_verbose(r, true, false, false);
-        ll_decode_function((uintptr_t) processedFunction, (DecodeFunc) dbrew_decode, r, &llconfig, state);
-    }
+    //     // Print out decoded assembly.
+    //     dbrew_verbose(r, true, false, false);
+    //     ll_decode_function((uintptr_t) processedFunction, (DecodeFunc) dbrew_decoder, r, &llconfig, state);
+    // }
 
     __asm__ volatile("" ::: "memory");
     JTimerCont(&timerRun);

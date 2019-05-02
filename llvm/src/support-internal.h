@@ -21,37 +21,18 @@
  * \file
  **/
 
-#ifndef LL_SUPPORT_H
-#define LL_SUPPORT_H
+#ifndef DBLL_SUPPORT_H
+#define DBLL_SUPPORT_H
 
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
-#include <llvm-c/Transforms/PassManagerBuilder.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * \ingroup LLSupport
- **/
-enum LLSupportIntrinsics {
-    LL_INTRINSIC_DO_NOTHING,
-    LL_INTRINSIC_CTPOP,
-    LL_INTRINSIC_SADD_WITH_OVERFLOW,
-    LL_INTRINSIC_SSUB_WITH_OVERFLOW,
-    LL_INTRINSIC_SMUL_WITH_OVERFLOW,
-};
-
-typedef enum LLSupportIntrinsics LLSupportIntrinsics;
-
-LLVMValueRef ll_support_get_intrinsic(LLVMModuleRef, LLSupportIntrinsics, LLVMTypeRef*, unsigned);
-LLVMAttributeRef ll_support_get_enum_attr(LLVMContextRef, const char*);
-void ll_support_pass_manager_builder_set_enable_vectorize(LLVMPassManagerBuilderRef, LLVMBool);
-void ll_support_enable_fast_math(LLVMValueRef);
-LLVMBool ll_support_is_constant_int(LLVMValueRef);
-LLVMValueRef ll_support_metadata_loop_unroll(LLVMContextRef);
-LLVMBool ll_support_create_mcjit_compiler(LLVMExecutionEngineRef*, LLVMModuleRef, char**);
+LLVMValueRef dbll_support_metadata_loop_unroll(LLVMContextRef);
+LLVMBool dbll_support_create_mcjit_compiler(LLVMExecutionEngineRef*, LLVMModuleRef, char**);
 
 #ifdef __cplusplus
 }

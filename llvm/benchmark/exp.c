@@ -11,6 +11,7 @@
 
 #include <dbrew.h>
 #include <dbrew-llvm.h>
+#include <dbrew-decoder.h>
 
 #include "timer.h"
 
@@ -19,7 +20,7 @@ typedef double (* ExpFunc)(double, size_t);
 
 static
 double
-exp(double val, size_t exp)
+fast_exp(double val, size_t exp)
 {
     double ans = 1;
     while (exp)
@@ -38,27 +39,25 @@ benchmark_run(size_t run_count, bool transform)
     ExpFunc func;
     JTimer timerCompile = {0}, timerRun = {0};
 
-    LLState* state = NULL;
+    LLEngine* state = NULL;
     LLFunction* llfn = NULL;
-    Rewriter* r = NULL;
 
     __asm__ volatile("" ::: "memory");
     JTimerCont(&timerCompile);
     __asm__ volatile("" ::: "memory");
     if (!transform)
-        func = exp;
+        func = fast_exp;
     else
     {
-        LLConfig llconfig = {
+        LLFunctionConfig llconfig = {
             .name = "exp",
             .stackSize = 128,
             .signature = 02772,
         };
 
-        r = dbrew_new();
         state = ll_engine_init();
 
-        llfn = ll_decode_function(exp, (DecodeFunc) dbrew_decode, r, &llconfig, state);
+        llfn = ll_decode_function(fast_exp, &llconfig, state);
         assert(llfn != NULL);
 
         llfn = ll_function_specialize(llfn, 1, 40, 0, state);
@@ -83,9 +82,6 @@ benchmark_run(size_t run_count, bool transform)
 
     if (state != NULL)
         ll_engine_dispose(state);
-
-    if (r != NULL)
-        dbrew_free(r);
 }
 
 int

@@ -21,21 +21,49 @@
  * \file
  **/
 
-#ifndef LL_DECODER_H
-#define LL_DECODER_H
+#ifndef LL_ENGINE_INTERNAL_H
+#define LL_ENGINE_INTERNAL_H
 
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <llvm-c/ExecutionEngine.h>
 
-#include <dbrew.h>
-
-#include <llcommon.h>
+#include <llengine.h>
 #include <llfunction.h>
 
 
-typedef DBB* (*DecodeFunc)(void*, uintptr_t);
+#define warn_if_reached() do { printf("!WARN %s: Code should not be reached.\n", __func__); __asm__("int3"); } while (0)
 
-LLFunction* ll_decode_function(uintptr_t, DecodeFunc, void*, LLConfig*, LLState*);
+struct LLEngine {
+    /**
+     * \brief The LLVM Context
+     **/
+    LLVMContextRef context;
+    /**
+     * \brief The LLVM Module
+     **/
+    LLVMModuleRef module;
+    /**
+     * \brief The LLVM execution engine
+     **/
+    LLVMExecutionEngineRef engine;
+
+    /**
+     * \brief The function count
+     **/
+    size_t functionCount;
+    /**
+     * \brief The allocated size for function
+     **/
+    size_t functionsAllocated;
+    /**
+     * \brief The functions of the module
+     **/
+    LLFunction** functions;
+
+    LLVMValueRef globalBase;
+};
 
 #endif

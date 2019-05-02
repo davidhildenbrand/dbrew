@@ -31,8 +31,8 @@
 
 #include <llfunction.h>
 
-#include <llcommon.h>
-#include <llcommon-internal.h>
+#include <llengine.h>
+#include <llfunc.h>
 
 
 /**
@@ -83,36 +83,11 @@ struct LLFunction {
      **/
     LLFunctionKind kind;
 
-    union {
-        struct {
-            /**
-             * \brief The size of the stack in bytes
-             **/
-            size_t stackSize;
+    LLFunc* func;
 
-            /**
-             * \brief The basic block count
-             **/
-            size_t bbCount;
-            /**
-             * \brief The allocated size for basic blocks
-             **/
-            size_t bbsAllocated;
-            /**
-             * \brief Array of basics blocks belonging to this function
-             **/
-            LLBasicBlock** bbs;
-
-            /**
-             * \brief The initial basic block, which is the entry point
-             **/
-            LLBasicBlock* initialBB;
-        } definition;
-    } u;
+    uint64_t noaliasParams;
 };
 
-LLFunction* ll_function_new_definition(uintptr_t, LLConfig*, LLState*);
-void ll_function_add_basic_block(LLFunction*, LLBasicBlock*);
-bool ll_function_build_ir(LLFunction*, LLState*);
+LLFunction* ll_function_new_definition(uintptr_t, LLFunctionConfig*, LLEngine*);
 
 #endif

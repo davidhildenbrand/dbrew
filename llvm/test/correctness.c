@@ -31,6 +31,7 @@
 
 #include <dbrew.h>
 #include <dbrew-llvm.h>
+#include <dbrew-decoder.h>
 
 
 #define MMAP_ADDR1 0x302000
@@ -60,17 +61,16 @@ test_compare_output(gconstpointer userdata)
 {
     const TestFunction* testFunc = userdata;
 
-    LLConfig config = {
+    LLFunctionConfig config = {
         .name = "test",
         .signature = testFunc->signature,
         .stackSize = 256,
     };
 
-    LLState* engine = ll_engine_init();
+    LLEngine* engine = ll_engine_init();
     g_assert(engine != NULL);
 
-    Rewriter* dbrewDecoder = dbrew_new();
-    LLFunction* function = ll_decode_function((uintptr_t) testFunc->function, (DecodeFunc) dbrew_decode, dbrewDecoder, &config, engine);
+    LLFunction* function = ll_decode_function((uintptr_t) testFunc->function, &config, engine);
     g_assert(function != NULL);
 
     if (g_test_verbose())
@@ -189,7 +189,6 @@ test_compare_output(gconstpointer userdata)
     }
 
     ll_engine_dispose(engine);
-    dbrew_free(dbrewDecoder);
 }
 
 #define ASM_DECL(name,...) extern void name(void); \

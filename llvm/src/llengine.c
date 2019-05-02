@@ -34,18 +34,14 @@
 #include <llvm-c/Transforms/Vectorize.h>
 #include <llvm-c/Transforms/PassManagerBuilder.h>
 
-#include <common.h>
-#include <engine.h>
-
 #include <llengine.h>
+#include <llengine-internal.h>
 
-#include <llbasicblock-internal.h>
-#include <llcommon.h>
-#include <llcommon-internal.h>
 #include <lldecoder.h>
+
 #include <llfunction.h>
 #include <llfunction-internal.h>
-#include <llsupport-internal.h>
+#include <support-internal.h>
 
 /**
  * \defgroup LLEngine Engine
@@ -55,12 +51,12 @@
  **/
 
 static
-LLState*
+LLEngine*
 ll_state_create(void)
 {
-    LLState* state;
+    LLEngine* state;
 
-    state = calloc(1, sizeof(LLState));
+    state = calloc(1, sizeof(LLEngine));
     state->context = LLVMContextCreate();
 
     return state;
@@ -68,9 +64,8 @@ ll_state_create(void)
 
 static
 bool
-ll_state_init_common(LLState* state)
+ll_state_init_common(LLEngine* state)
 {
-    state->builder = LLVMCreateBuilderInContext(state->context);
     state->functionCount = 0;
     state->functionsAllocated = 0;
     state->functions = NULL;
@@ -81,7 +76,7 @@ ll_state_init_common(LLState* state)
     LLVMInitializeNativeTarget();
 
     char* outerr = NULL;
-    if (ll_support_create_mcjit_compiler(&state->engine, state->module, &outerr))
+    if (dbll_support_create_mcjit_compiler(&state->engine, state->module, &outerr))
     {
         printf("CRITICAL Could not setup execution engine: %s", outerr);
         free(outerr);
@@ -89,13 +84,10 @@ ll_state_init_common(LLState* state)
         return true;
     }
 
-    state->emptyMD = LLVMMDNodeInContext(state->context, NULL, 0);
-    state->unrollMD = ll_support_metadata_loop_unroll(state->context);
-    state->globalOffsetBase = 0;
-    state->enableUnsafePointerOptimizations = false;
-    state->enableOverflowIntrinsics = false;
-    state->enableFastMath = false;
-    state->enableFullLoopUnroll = false;
+    // Construct global variable to avoid inttoptr instructions
+    LLVMTypeRef i8 = LLVMInt8TypeInContext(state->context);
+    state->globalBase = LLVMAddGlobal(state->module, i8, "__ll_global_base__");
+    LLVMAddGlobalMapping(state->engine, state->globalBase, (void*) 0x1000);
 
     return false;
 }
@@ -108,10 +100,10 @@ ll_state_init_common(LLState* state)
  *
  * \returns A new module
  **/
-LLState*
+LLEngine*
 ll_engine_init(void)
 {
-    LLState* state = ll_state_create();
+    LLEngine* state = ll_state_create();
     if (state == NULL)
         return NULL;
 
@@ -126,10 +118,10 @@ ll_engine_init(void)
     return state;
 }
 
-LLState*
+LLEngine*
 ll_engine_init_from_bc_file(char* fileName)
 {
-    LLState* state = ll_state_create();
+    LLEngine* state = ll_state_create();
     if (state == NULL)
         return NULL;
 
@@ -175,55 +167,6 @@ ll_engine_init_from_bc_file(char* fileName)
 }
 
 /**
- * Enable the usage of overflow intrinsics instead of bitwise operations when
- * setting the overflow flag. For dynamic values this leads to better code which
- * relies on the overflow flag again. However, immediate values are not folded
- * when they are guaranteed to overflow.
- *
- * This function must be called before the IR of the function is built.
- *
- * \author Alexis Engelke
- *
- * \param state The module state
- * \param enable Whether overflow intrinsics shall be used
- **/
-void
-ll_engine_enable_overflow_intrinsics(LLState* state, bool enable)
-{
-    state->enableOverflowIntrinsics = enable;
-}
-
-/**
- * Enable unsafe floating-point optimizations, similar to -ffast-math.
- *
- * This function must be called before the IR of the function is built.
- *
- * \author Alexis Engelke
- *
- * \param state The module state
- * \param enable Whether unsafe floating-point optimizations may be performed
- **/
-void
-ll_engine_enable_fast_math(LLState* state, bool enable)
-{
-    state->enableFastMath = enable;
-}
-
-/**
- * Force loop unrolling whenever possible.
- *
- * \author Alexis Engelke
- *
- * \param state The module state
- * \param enable Whether force loop unrolling
- **/
-void
-ll_engine_enable_full_loop_unroll(LLState* state, bool enable)
-{
-    state->enableFullLoopUnroll = enable;
-}
-
-/**
  * Dispose an engine. The functions generated will not be usable any longer.
  *
  * \author Alexis Engelke
@@ -231,10 +174,10 @@ ll_engine_enable_full_loop_unroll(LLState* state, bool enable)
  * \param state The module state
  **/
 void
-ll_engine_dispose(LLState* state)
+ll_engine_dispose(LLEngine* state)
 {
     // LLVMDisposeModule(state->module);
-    LLVMDisposeBuilder(state->builder);
+    // LLVMDisposeBuilder(state->builder);
     LLVMDisposeExecutionEngine(state->engine);
     // Disposing the context sometimes crashes LLVM (v6). Valgrind complains
     // about use-after-free and double-free errors...
@@ -252,7 +195,7 @@ ll_engine_dispose(LLState* state)
  * \param level The optimization level
  **/
 void
-ll_engine_optimize(LLState* state, int level)
+ll_engine_optimize(LLEngine* state, int level)
 {
     LLVMPassManagerRef pm = LLVMCreatePassManager();
     LLVMPassManagerBuilderRef pmb = LLVMPassManagerBuilderCreate();
@@ -274,7 +217,7 @@ ll_engine_optimize(LLState* state, int level)
     }
 
     LLVMPassManagerBuilderSetOptLevel(pmb, level);
-    ll_support_pass_manager_builder_set_enable_vectorize(pmb, level >= 3);
+    // dbll_support_pass_manager_builder_set_enable_vectorize(pmb, level >= 3);
 
     LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm);
     LLVMPassManagerBuilderDispose(pmb);
@@ -297,7 +240,7 @@ ll_engine_optimize(LLState* state, int level)
  * \param state The module state
  **/
 void
-ll_engine_dump(LLState* state)
+ll_engine_dump(LLEngine* state)
 {
     char* module = LLVMPrintModuleToString(state->module);
 
@@ -307,97 +250,13 @@ ll_engine_dump(LLState* state)
 }
 
 void
-ll_engine_disassemble(LLState* state)
+ll_engine_disassemble(LLEngine* state)
 {
     FILE* llc = popen("llc -filetype=asm", "w");
 
     LLVMWriteBitcodeToFD(state->module, fileno(llc), false, false);
 
     pclose(llc);
-}
-
-/**
- * Code generation back-end for DBrew.
- *
- * \author Alexis Engelke
- *
- * \param rewriter The DBrew rewriter
- **/
-void
-dbrew_llvm_backend(Rewriter* rewriter)
-{
-    LLState* state = ll_engine_init();
-
-    LLConfig config = {
-        .stackSize = 128,
-        .signature = 026, // 6 pointer params, returns i64
-        .name = "__dbrew__"
-    };
-
-    LLFunction* function = ll_function_new_definition(rewriter->func, &config, state);
-
-    for (int i = 0; i < rewriter->capBBCount; i++)
-    {
-        CBB* cbb = rewriter->capBB + i;
-        LLBasicBlock* bb = ll_basic_block_new_from_cbb(cbb);
-
-        cbb->generatorData = bb;
-
-        ll_function_add_basic_block(function, bb);
-    }
-
-    for (int i = 0; i < rewriter->capBBCount; i++)
-    {
-        CBB* cbb = rewriter->capBB + i;
-        LLBasicBlock* bb = cbb->generatorData;
-        LLBasicBlock* branch = NULL;
-        LLBasicBlock* fallThrough = NULL;
-
-        if (cbb->nextBranch != NULL)
-            branch = cbb->nextBranch->generatorData;
-        if (cbb->nextFallThrough != NULL)
-            fallThrough = cbb->nextFallThrough->generatorData;
-
-        ll_basic_block_add_branches(bb, branch, fallThrough);
-    }
-
-    if (ll_function_build_ir(function, state))
-    {
-        warn_if_reached();
-        rewriter->generatedCodeAddr = 0;
-
-        return;
-    }
-
-    ll_engine_optimize(state, 3);
-
-    if (rewriter->showOptSteps)
-        ll_engine_dump(state);
-
-    rewriter->generatedCodeAddr = (uintptr_t) ll_function_get_pointer(function, state);
-    rewriter->generatedCodeSize = 0;
-}
-
-/**
- * Rewrite a function using DBrew and the LLVM optimization and code generation.
- *
- * \author Alexis Engelke
- *
- * \param r The DBrew rewriter
- **/
-uintptr_t
-dbrew_llvm_rewrite(Rewriter* r, ...)
-{
-    va_list argptr;
-
-    va_start(argptr, r);
-    vEmulateAndCapture(r, argptr);
-    va_end(argptr);
-
-    // runOptsOnCaptured(r);
-    dbrew_llvm_backend(r);
-
-    return r->generatedCodeAddr;
 }
 
 /**

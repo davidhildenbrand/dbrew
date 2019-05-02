@@ -28,18 +28,55 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#include <llcommon.h>
+#include <lldecoder.h>
+#include <llengine.h>
 
 
 struct LLFunction;
 
 typedef struct LLFunction LLFunction;
 
-LLFunction* ll_function_declare(uintptr_t, uint64_t, const char*, LLState* state);
-LLFunction* ll_function_specialize(LLFunction*, uintptr_t, uintptr_t, size_t, LLState* state);
-LLFunction* ll_function_wrap_external(const char*, LLState* state);
+struct LLFunctionConfig {
+    /**
+     * \brief The name of the function
+     **/
+    const char* name;
+
+    /**
+     * \brief The size of the emulated stack
+     **/
+    size_t stackSize;
+
+    bool fastMath;
+    bool forceLoopUnroll;
+
+    /**
+     * \brief Bitwise representation of the function signature
+     **/
+    size_t signature;
+
+    /**
+     * \brief Whether the function is private
+     **/
+    bool internal;
+
+    /**
+     * \brief Whether to disable instruction deduplication.
+     *
+     * This option only has effect when used with #ll_decode_function.
+     **/
+    bool disableInstrDedup;
+};
+
+typedef struct LLFunctionConfig LLFunctionConfig;
+
+LLFunction* ll_function_declare(uintptr_t, uint64_t, const char*, LLEngine* state);
+LLFunction* ll_function_specialize(LLFunction*, uintptr_t, uintptr_t, size_t, LLEngine* state);
+LLFunction* ll_function_wrap_external(const char*, LLEngine* state);
 void ll_function_dispose(LLFunction*);
 void ll_function_dump(LLFunction*);
-void* ll_function_get_pointer(LLFunction*, LLState*);
+void* ll_function_get_pointer(LLFunction*, LLEngine*);
+
+LLFunction* ll_decode_function(uintptr_t, LLFunctionConfig*, LLEngine*);
 
 #endif

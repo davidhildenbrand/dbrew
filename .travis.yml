@@ -84,6 +84,7 @@ install:
   - export CXX=$COMPILERCXX
 
 script:
+  - git submodule update --init --recursive
   - mkdir build
   - meson build
   - ninja -v -C build

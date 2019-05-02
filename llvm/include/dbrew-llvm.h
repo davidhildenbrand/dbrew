@@ -24,8 +24,6 @@
 #ifndef LL_PUBLIC_H
 #define LL_PUBLIC_H
 
-#include <llcommon.h>
-#include <lldecoder.h>
 #include <llengine.h>
 #include <llfunction.h>
 

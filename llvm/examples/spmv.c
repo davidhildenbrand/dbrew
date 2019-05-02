@@ -7,6 +7,8 @@
 
 #include <dbrew.h>
 #include <dbrew-llvm.h>
+#include <dbrew-backend.h>
+#include <dbrew-decoder.h>
 #include <../benchmark/timer.h>
 
 // Include generated test matrix, provides rawMatrix and rawVector.
@@ -25,7 +27,7 @@ struct SpMatrix {
     // First HEIGHT entries consists of start/end index in entries array.
     // Others are in order (!) tuples of column/value.
     // Lookup therefore can be done in O(width).
-    Entry entries[0];
+    Entry entries[];
 };
 
 typedef struct SpMatrix SpMatrix;
@@ -102,16 +104,16 @@ main(void)
     dbrew_optverbose(r, false);
     dbrew_verbose(r, false, false, false);
 
-    LLConfig config = {
+    LLFunctionConfig config = {
         .name = "spmv",
         .stackSize = 0,
+        .fastMath = true,
+        .forceLoopUnroll = true,
         .signature = 011113 // void (i8* noalias, i8* noalias, i8* noalias)
     };
 
-    LLState* state = ll_engine_init();
-    ll_engine_enable_fast_math(state, true);
-    ll_engine_enable_full_loop_unroll(state, true);
-    LLFunction* fn = ll_decode_function((uintptr_t) spmv_asm, (DecodeFunc) dbrew_decode, r, &config, state);
+    LLEngine* state = ll_engine_init();
+    LLFunction* fn = ll_decode_function((uintptr_t) spmv_asm, &config, state);
     LLFunction* fnspec = ll_function_specialize(fn, 0, (uintptr_t) rawMatrix, sizeof(rawMatrix), state);
 
     ll_engine_optimize(state, 3);
