@@ -11,7 +11,6 @@
 
 #include <dbrew.h>
 #include <dbrew-llvm.h>
-#include <dbrew-decoder.h>
 
 #include "timer.h"
 

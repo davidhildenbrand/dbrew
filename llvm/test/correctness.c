@@ -31,7 +31,6 @@
 
 #include <dbrew.h>
 #include <dbrew-llvm.h>
-#include <dbrew-decoder.h>
 
 
 #define MMAP_ADDR1 0x302000

@@ -7,7 +7,6 @@
 #include <dbrew.h>
 #include <dbrew-llvm.h>
 #include <dbrew-backend.h>
-#include <dbrew-decoder.h>
 
 #include "stencil-kernels.h"
 #include "timer.h"
