@@ -51,11 +51,14 @@ def benchmark_stencil_codesize(transmode, granularity, datatype):
                             stdout=subprocess.PIPE)
     start = 0;
     end = 0;
+    code = "";
 
     for line in result.stdout.splitlines():
-        match = re.match (".*(0x[0-9a-f]*):\s*(([0-9a-f][0-9a-f]\s)+)\s+.*", str(line))
+        line = line.decode('ascii')
+        match = re.match (".*(0x[0-9a-f]*):\s*(([0-9a-f][0-9a-f]\s)+)\s+.*", line)
         if not match:
             continue
+        code += line + "\n";
         addr = int(match.groups()[0], 0)
         length = len(match.groups()[1]) / 3
         assert(addr > 0)
@@ -70,7 +73,7 @@ def benchmark_stencil_codesize(transmode, granularity, datatype):
 #    print("Smallest address: " + hex(start))
 #    print("Highetst address: " + hex(end))
 #    print("Size: " + str(int(end - start + 1)))
-    return int(end - start + 1);
+    return int(end - start + 1), code;
 
 def benchmark_stencil_rtimes(transmode, granularity, datatype, runs):
     result = subprocess.run(args=[stencil_binary,
@@ -129,9 +132,14 @@ def benchmark_stencil():
                 rtimes_avg[name] = '%f' % mean(rtimes)
                 rtimes_stdev[name] = '%f' % stdev(rtimes)
 
-                codesize = benchmark_stencil_codesize(transmode["stencil"], granularity[1],
+                codesize,code = benchmark_stencil_codesize(transmode["stencil"], granularity[1],
                                                       datatype[1])
                 codesizes[name] = codesize
+
+                code_file = open("results-code-" + granularity[0] + "-" +
+                        datatype[0] + "-" + name + csv_suffix + ".txt", 'w', newline='')
+                code_file.write(code)
+                code_file.close()
 
                 # native has no compilation
                 if name == "native":
