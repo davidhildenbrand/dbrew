@@ -207,7 +207,7 @@ test_compare_output(gconstpointer userdata)
 #define RET_FLAGS_MASK(mask) pushfq ; pop rax ; and eax, mask ; ret
 #define RET_FLAGS RET_FLAGS_MASK(OF|SF|ZF|AF|PF|CF)
 
-#define UNPCK(reg,val) push val ; push val ; movdqu reg, [rsp] ; add rsp, 0x10
+#define UNPCK(reg,val) push val ; not val ; push val ; movdqu reg, [rsp] ; add rsp, 0x10
 #define RET_XMM0 sub rsp, 0x10 ; movdqu [rsp], xmm0 ; pop rax ; pop rdx ; not rdx ; xor rax, rdx ; ret
 #define RET_XMM0S movd eax, xmm0 ; ret
 #define RET_XMM0D movq rax, xmm0 ; ret

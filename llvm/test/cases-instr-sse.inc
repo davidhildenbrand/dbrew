@@ -104,6 +104,12 @@ TEST_CASE("/instr/movlps/reg", 02222, 0,
     add rsp, 8;
     RET_XMM0;
 )
+TEST_CASE("/instr/movlhps", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
+    movlhps xmm0, xmm1;
+    RET_XMM0;
+)
 TEST_CASE("/instr/movlpd/mem", 0221, 0,
     UNPCK(xmm0, rdi);
     sub rsp, 8;
@@ -133,6 +139,12 @@ TEST_CASE("/instr/movhps/reg", 02222, 0,
     add rsp, 8;
     RET_XMM0;
 )
+TEST_CASE("/instr/movhlps", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
+    movhlps xmm0, xmm1;
+    RET_XMM0;
+)
 TEST_CASE("/instr/movhpd/mem", 0221, 0,
     UNPCK(xmm0, rdi);
     sub rsp, 8;
@@ -148,12 +160,84 @@ TEST_CASE("/instr/movhpd/reg", 02222, 0,
     RET_XMM0;
 )
 
-TEST_CASE("/instr/unpcklps", 07722, 0,
+TEST_CASE("/instr/unpcklps", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
     unpcklps xmm0, xmm1;
     RET_XMM0;
 )
-TEST_CASE("/instr/unpcklpd", 07722, 0,
+TEST_CASE("/instr/unpcklpd", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
     unpcklpd xmm0, xmm1;
+    RET_XMM0;
+)
+TEST_CASE("/instr/unpckhps", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
+    unpckhps xmm0, xmm1;
+    RET_XMM0;
+)
+TEST_CASE("/instr/unpckhpd", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
+    unpckhpd xmm0, xmm1;
+    RET_XMM0;
+)
+
+TEST_CASE("/instr/shufps/00", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
+    shufps xmm0, xmm1, 0x00;
+    RET_XMM0;
+)
+TEST_CASE("/instr/shufps/72", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
+    shufps xmm0, xmm1, 0x72;
+    RET_XMM0;
+)
+TEST_CASE("/instr/shufps/55", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
+    shufps xmm0, xmm1, 0x55;
+    RET_XMM0;
+)
+
+TEST_CASE("/instr/insertps/reg/00", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
+    insertps xmm0, xmm1, 0x00;
+    RET_XMM0;
+)
+TEST_CASE("/instr/insertps/reg/72", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
+    insertps xmm0, xmm1, 0x72;
+    RET_XMM0;
+)
+TEST_CASE("/instr/insertps/reg/55", 02222, 0,
+    UNPCK(xmm0, rdi);
+    UNPCK(xmm1, rsi);
+    insertps xmm0, xmm1, 0x55;
+    RET_XMM0;
+)
+TEST_CASE("/instr/insertps/mem/00", 02222, 0,
+    UNPCK(xmm0, rdi);
+    mov [rsp-8], rsi;
+    insertps xmm0, [rsp-8], 0x00;
+    RET_XMM0;
+)
+TEST_CASE("/instr/insertps/mem/72", 02222, 0,
+    UNPCK(xmm0, rdi);
+    mov [rsp-8], rsi;
+    insertps xmm0, [rsp-8], 0x72;
+    RET_XMM0;
+)
+TEST_CASE("/instr/insertps/mem/55", 02222, 0,
+    UNPCK(xmm0, rdi);
+    mov [rsp-8], rsi;
+    insertps xmm0, [rsp-8], 0x55;
     RET_XMM0;
 )
 
