@@ -187,6 +187,7 @@ test_compare_output(gconstpointer userdata)
         munmap((void*) MMAP_ADDR2, 0x1000);
     }
 
+    ll_function_dispose(function);
     ll_engine_dispose(engine);
 }
 
