@@ -311,17 +311,18 @@ ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_
     // Last check is for sanity, 1 MiB should be enough
     if (length != 0 && length < 0x100000)
     {
-        LLVMTypeRef arrayType = LLVMArrayType(i64, length / 8);
-        LLVMValueRef qwords[length / 8];
+        size_t elem_count = (length + 7) / 8;
+        LLVMTypeRef arrayType = LLVMArrayType(i64, elem_count);
+        LLVMValueRef qwords[elem_count];
 
         uint64_t* data = (uint64_t*) value;
-        for (size_t i = 0; i < length / 8; i++)
+        for (size_t i = 0; i < elem_count; i++)
             qwords[i] = LLVMConstInt(i64, data[i], false);
 
         LLVMValueRef global = LLVMAddGlobal(state->module, arrayType, "globalParam0");
         LLVMSetGlobalConstant(global, true);
         LLVMSetLinkage(global, LLVMPrivateLinkage);
-        LLVMSetInitializer(global, LLVMConstArray(arrayType, qwords, length / 8));
+        LLVMSetInitializer(global, LLVMConstArray(arrayType, qwords, elem_count));
 
         fixed = LLVMBuildPointerCast(builder, global, paramTypes[index], "");
     }
