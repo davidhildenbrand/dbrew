@@ -230,6 +230,7 @@ ll_function_new_definition(uintptr_t address, LLFunctionConfig* config, LLEngine
     function->func = ll_func(config->name, fnty, state->module);
     ll_func_enable_fast_math(function->func, config->fastMath);
     ll_func_enable_full_loop_unroll(function->func, config->forceLoopUnroll);
+    ll_func_set_stack_size(function->func, config->stackSize);
     ll_func_set_global_base(function->func, 0x1000, state->globalBase);
     return function;
 }
