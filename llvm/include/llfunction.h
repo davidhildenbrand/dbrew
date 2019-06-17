@@ -47,24 +47,11 @@ struct LLFunctionConfig {
     size_t stackSize;
 
     bool fastMath;
-    bool forceLoopUnroll;
 
     /**
      * \brief Bitwise representation of the function signature
      **/
     size_t signature;
-
-    /**
-     * \brief Whether the function is private
-     **/
-    bool internal;
-
-    /**
-     * \brief Whether to disable instruction deduplication.
-     *
-     * This option only has effect when used with #ll_decode_function.
-     **/
-    bool disableInstrDedup;
 };
 
 typedef struct LLFunctionConfig LLFunctionConfig;

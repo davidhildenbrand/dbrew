@@ -107,7 +107,6 @@ main(void)
         .name = "spmv",
         .stackSize = 0,
         .fastMath = true,
-        .forceLoopUnroll = true,
         .signature = 011113 // void (i8* noalias, i8* noalias, i8* noalias)
     };
 
