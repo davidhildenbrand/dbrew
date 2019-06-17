@@ -31,8 +31,8 @@
 
 #include <llfunction.h>
 
+#include <rellume/func.h>
 #include <llengine.h>
-#include <llfunc.h>
 
 
 /**

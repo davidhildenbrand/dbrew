@@ -6,9 +6,9 @@
 #include <engine.h>
 #include <printer.h>
 
-#include <llbasicblock.h>
-#include <llfunc.h>
-#include <llinstr.h>
+#include <rellume/basicblock.h>
+#include <rellume/func.h>
+#include <rellume/instr.h>
 
 #include <dbrew-backend.h>
 

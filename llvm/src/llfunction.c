@@ -30,8 +30,8 @@
 #include <llvm-c/Core.h>
 #include <llvm-c/Support.h>
 
-#include <llbasicblock.h>
-#include <lldecoder.h>
+#include <rellume/basicblock.h>
+#include <rellume/decoder.h>
 
 #include <llfunction.h>
 #include <llfunction-internal.h>
