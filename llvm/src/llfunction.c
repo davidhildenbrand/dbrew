@@ -225,9 +225,8 @@ LLFunction*
 ll_function_new_definition(uintptr_t address, LLFunctionConfig* config, LLEngine* state)
 {
     LLFunction* function = ll_function_new(LL_FUNCTION_DEFINITION, address, state);
-    LLVMTypeRef fnty = ll_function_unpack_type(config->signature, &function->noaliasParams, state);
     function->name = config->name;
-    function->func = ll_func(config->name, fnty, state->module);
+    function->func = ll_func(config->name, state->module);
     ll_func_enable_fast_math(function->func, config->fastMath);
     ll_func_enable_full_loop_unroll(function->func, config->forceLoopUnroll);
     ll_func_set_stack_size(function->func, config->stackSize);
@@ -240,7 +239,8 @@ ll_decode_function(uintptr_t address, LLFunctionConfig* config, LLEngine* state)
 {
     LLFunction* function = ll_function_new_definition(address, config, state);
     ll_func_decode(function->func, address);
-    function->llvmFunction = ll_func_lift(function->func);
+    LLVMTypeRef fnty = ll_function_unpack_type(config->signature, &function->noaliasParams, state);
+    function->llvmFunction = ll_func_wrap_sysv(ll_func_lift(function->func), fnty, state->module);
     ll_function_apply_noalias(function->llvmFunction, function->noaliasParams, state);
     return function;
 }
