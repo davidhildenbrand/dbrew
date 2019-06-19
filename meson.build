@@ -26,11 +26,6 @@ endif
 
 add_project_arguments(['-Wno-unused-parameter'], language: 'cpp')
 
-subdir('src')
-libdbrew_dep = declare_dependency(include_directories: include_directories('include'),
-                                  link_with: libdbrew)
-libdbrew_dep_priv = declare_dependency(include_directories: dbrew_includes,
-                                       link_with: libdbrew)
-
+subdir('origin')
 subdir('llvm')
 

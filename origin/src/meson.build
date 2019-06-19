@@ -16,5 +16,5 @@ sources = [
 
 dbrew_includes = include_directories('../include', '../include/priv')
 
-libdbrew = static_library('dbrew', sources, include_directories: dbrew_includes)
+libdbrew = static_library('dbrew', sources, include_directories: dbrew_includes, install: true)
 

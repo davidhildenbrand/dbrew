@@ -2,6 +2,8 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include <llvm-c/Core.h>
+
 #include <common.h>
 #include <engine.h>
 #include <printer.h>
@@ -264,7 +266,12 @@ dbrew_llvm_backend(Rewriter* rewriter)
         ll_basic_block_add_branches(cbb->generatorData, branch, fallThrough);
     }
 
-    function->llvmFunction = ll_func_lift(function->func);
+    LLVMTypeRef pi8 = LLVMPointerType(LLVMInt8TypeInContext(state->context), 0);
+    LLVMTypeRef i64 = LLVMInt64TypeInContext(state->context);
+    LLVMTypeRef types[6] = {pi8, pi8, pi8, pi8, pi8, pi8};
+    LLVMTypeRef fn_ty = LLVMFunctionType(i64, types, 6, false);
+
+    function->llvmFunction = ll_func_wrap_sysv(ll_func_lift(function->func), fn_ty, state->module);
 
     if (function->llvmFunction == NULL)
     {
