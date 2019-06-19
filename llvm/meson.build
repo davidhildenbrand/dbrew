@@ -6,7 +6,12 @@ rellume = subproject('rellume')
 librellume = rellume.get_variable('librellume')
 
 subdir('src')
-subdir('benchmark')
-subdir('examples')
-subdir('test')
 
+dbrewllvm = declare_dependency(include_directories: include_directories('include'),
+                               link_with: libdbrewllvm_lib,
+                               dependencies: [libllvm, librellume])
+dbrewllvm_priv = declare_dependency(include_directories: include_directories('src', 'include'),
+                                    link_with: libdbrewllvm_lib,
+                                    dependencies: [libllvm, librellume])
+
+subdir('test')
