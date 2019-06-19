@@ -196,6 +196,9 @@ ll_engine_optimize(LLEngine* state, int level)
     LLVMPassManagerRef pm = LLVMCreatePassManager();
     LLVMPassManagerBuilderRef pmb = LLVMPassManagerBuilderCreate();
 
+    // The standard pass pipeline doesn't include the always inliner pass.
+    LLVMAddAlwaysInlinerPass(pm);
+
     LLVMPassManagerBuilderSetOptLevel(pmb, level);
     LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm);
     LLVMPassManagerBuilderDispose(pmb);
