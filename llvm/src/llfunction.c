@@ -163,7 +163,7 @@ ll_function_new_definition(LLFunctionConfig* config, LLEngine* state)
 {
     LLFunction* function = ll_function_new(state);
     function->name = config->name;
-    function->func = ll_func(config->name, state->module);
+    function->func = ll_func(state->module);
     ll_func_enable_fast_math(function->func, config->fastMath);
     ll_func_set_stack_size(function->func, config->stackSize);
     ll_func_set_global_base(function->func, 0x1000, state->globalBase);
