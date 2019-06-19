@@ -50,19 +50,6 @@ struct LLEngine {
      **/
     LLVMExecutionEngineRef engine;
 
-    /**
-     * \brief The function count
-     **/
-    size_t functionCount;
-    /**
-     * \brief The allocated size for function
-     **/
-    size_t functionsAllocated;
-    /**
-     * \brief The functions of the module
-     **/
-    LLFunction** functions;
-
     LLVMValueRef globalBase;
 };
 

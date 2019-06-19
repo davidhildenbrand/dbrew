@@ -66,10 +66,6 @@ static
 bool
 ll_state_init_common(LLEngine* state)
 {
-    state->functionCount = 0;
-    state->functionsAllocated = 0;
-    state->functions = NULL;
-
     LLVMSetTarget(state->module, "x86_64-pc-linux-gnu");
     LLVMLinkInMCJIT();
     LLVMInitializeNativeAsmPrinter();
@@ -200,25 +196,7 @@ ll_engine_optimize(LLEngine* state, int level)
     LLVMPassManagerRef pm = LLVMCreatePassManager();
     LLVMPassManagerBuilderRef pmb = LLVMPassManagerBuilderCreate();
 
-    // Run inliner early.
-    LLVMAddAlwaysInlinerPass(pm);
-
-    // Run some light-weight optimization passes before the main O3 pipeline
-    if (level >= 1)
-    {
-        // Simple pass to remove trivially redundant instructions.
-        LLVMAddEarlyCSEPass(pm);
-
-        // Run an additional GVN pass to remove a lot of unused instructions.
-        LLVMAddGVNPass(pm);
-
-        // InstrCombine will also remove some bloat
-        LLVMAddInstructionCombiningPass(pm);
-    }
-
     LLVMPassManagerBuilderSetOptLevel(pmb, level);
-    // dbll_support_pass_manager_builder_set_enable_vectorize(pmb, level >= 3);
-
     LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm);
     LLVMPassManagerBuilderDispose(pmb);
 

@@ -60,39 +60,16 @@ ll_support_get_enum_attr(LLVMContextRef context, const char* name)
  *
  * \author Alexis Engelke
  *
- * \param kind The kind of the function
- * \param address The address of the function
  * \param state The module state
  * \returns The declared function
  **/
 static LLFunction*
-ll_function_new(LLFunctionKind kind, uintptr_t address, LLEngine* state)
+ll_function_new(LLEngine* state)
 {
     LLFunction* function;
 
     function = malloc(sizeof(LLFunction));
-    function->kind = kind;
-    function->address = address;
-
-    if (state->functionsAllocated == 0)
-    {
-        state->functions = malloc(sizeof(LLBasicBlock*) * 10);
-        state->functionsAllocated = 10;
-
-        if (state->functions == NULL)
-            warn_if_reached();
-    }
-    else if (state->functionsAllocated == state->functionCount)
-    {
-        state->functions = realloc(state->functions, sizeof(LLBasicBlock*) * state->functionsAllocated * 2);
-        state->functionsAllocated *= 2;
-
-        if (state->functions == NULL)
-            warn_if_reached();
-    }
-
-    state->functions[state->functionCount] = function;
-    state->functionCount++;
+    function->func = NULL;
 
     return function;
 }
@@ -167,46 +144,6 @@ ll_function_apply_noalias(LLVMValueRef llvmFn, uint64_t noaliasParams, LLEngine*
 }
 
 /**
- * Declare a function in the module with the given address and name. If the name
- * is a symbol, the symbol has preference over the address (which is used to
- * detect calls to the function). If the name begins with `llvm.`, it is assumed
- * that an LLVM intrinsic is meant.
- *
- * \author Alexis Engelke
- *
- * \param address The address of the function
- * \param type The encoded type of the function
- * \param name The name of the function
- * \param state The module state
- * \returns The declared function
- **/
-LLFunction*
-ll_function_declare(uintptr_t address, uint64_t type, const char* name, LLEngine* state)
-{
-    uint64_t noaliasParams;
-    LLVMTypeRef fnty = ll_function_unpack_type(type, &noaliasParams, state);
-    LLFunction* function = ll_function_new(LL_FUNCTION_DECLARATION, address, state);
-    function->name = name;
-    function->llvmFunction = LLVMAddFunction(state->module, name, fnty);
-
-    ll_function_apply_noalias(function->llvmFunction, noaliasParams, state);
-
-    bool isIntrinsic = false;
-    bool isSymbol = false;
-
-    if (name != NULL)
-    {
-        isIntrinsic = strlen(name) > 5 && strncmp("llvm.", name, 5) == 0;
-        isSymbol = LLVMSearchForAddressOfSymbol(name);
-    }
-
-    if (!isIntrinsic && !isSymbol)
-        LLVMAddGlobalMapping(state->engine, function->llvmFunction, (void*) address);
-
-    return function;
-}
-
-/**
  * Define a new function at the given address and configuration. After this
  * call, the function consists only of a prologue. Basic blocks can be added
  * with #ll_function_add_basic_block, the final IR can be built with
@@ -222,9 +159,9 @@ ll_function_declare(uintptr_t address, uint64_t type, const char* name, LLEngine
  * \returns The defined function
  **/
 LLFunction*
-ll_function_new_definition(uintptr_t address, LLFunctionConfig* config, LLEngine* state)
+ll_function_new_definition(LLFunctionConfig* config, LLEngine* state)
 {
-    LLFunction* function = ll_function_new(LL_FUNCTION_DEFINITION, address, state);
+    LLFunction* function = ll_function_new(state);
     function->name = config->name;
     function->func = ll_func(config->name, state->module);
     ll_func_enable_fast_math(function->func, config->fastMath);
@@ -236,31 +173,12 @@ ll_function_new_definition(uintptr_t address, LLFunctionConfig* config, LLEngine
 LLFunction*
 ll_decode_function(uintptr_t address, LLFunctionConfig* config, LLEngine* state)
 {
-    LLFunction* function = ll_function_new_definition(address, config, state);
+    LLFunction* function = ll_function_new_definition(config, state);
     ll_func_decode(function->func, address);
-    LLVMTypeRef fnty = ll_function_unpack_type(config->signature, &function->noaliasParams, state);
+    uint64_t noaliasParams;
+    LLVMTypeRef fnty = ll_function_unpack_type(config->signature, &noaliasParams, state);
     function->llvmFunction = ll_func_wrap_sysv(ll_func_lift(function->func), fnty, state->module);
-    ll_function_apply_noalias(function->llvmFunction, function->noaliasParams, state);
-    return function;
-}
-
-LLFunction*
-ll_function_wrap_external(const char* name, LLEngine* state)
-{
-    LLVMValueRef llvmFunction = LLVMGetNamedFunction(state->module, name);
-
-    if (llvmFunction == NULL)
-        return NULL;
-
-    // The linkage was set to private when loading the external module. As we
-    // need to include the function in the symbol table without modifications of
-    // the function signature, set linkage to external (the default) again.
-    LLVMSetLinkage(llvmFunction, LLVMExternalLinkage);
-
-    LLFunction* function = ll_function_new(LL_FUNCTION_EXTERNAL, 0, state);
-    function->name = name;
-    function->llvmFunction = llvmFunction;
-
+    ll_function_apply_noalias(function->llvmFunction, noaliasParams, state);
     return function;
 }
 
@@ -283,7 +201,7 @@ ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_
 {
     LLVMBuilderRef builder = LLVMCreateBuilderInContext(state->context);
 
-    LLFunction* function = ll_function_new(LL_FUNCTION_SPECIALIZATION, 0, state);
+    LLFunction* function = ll_function_new(state);
     function->name = base->name;
 
     LLVMTypeRef fnType = LLVMGetElementType(LLVMTypeOf(base->llvmFunction));
@@ -374,35 +292,12 @@ ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_
 void
 ll_function_dispose(LLFunction* function)
 {
-    switch (function->kind)
+    if (function->func != NULL)
     {
-        case LL_FUNCTION_DEFINITION:
-            ll_func_dispose(function->func);
-            break;
-        case LL_FUNCTION_DECLARATION:
-        case LL_FUNCTION_SPECIALIZATION:
-        case LL_FUNCTION_EXTERNAL:
-            break;
-        default:
-            warn_if_reached();
+        ll_func_dispose(function->func);
     }
 
     free(function);
-}
-
-/**
- * Dump the LLVM IR of the function.
- *
- * \author Alexis Engelke
- *
- * \param state The function
- **/
-void
-ll_function_dump(LLFunction* function)
-{
-    char* value = LLVMPrintValueToString(function->llvmFunction);
-    puts(value);
-    LLVMDisposeMessage(value);
 }
 
 /**

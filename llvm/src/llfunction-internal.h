@@ -38,30 +38,6 @@
 /**
  * \ingroup LLFunction
  **/
-enum LLFunctionKind {
-    /**
-     * \brief The function is only declared
-     **/
-    LL_FUNCTION_DECLARATION,
-    /**
-     * \brief The function is defined from assembly code
-     **/
-    LL_FUNCTION_DEFINITION,
-    /**
-     * \brief The function is specialized
-     **/
-    LL_FUNCTION_SPECIALIZATION,
-    /**
-     * \brief The function was loaded from a LLVM input file
-     **/
-    LL_FUNCTION_EXTERNAL,
-};
-
-typedef enum LLFunctionKind LLFunctionKind;
-
-/**
- * \ingroup LLFunction
- **/
 struct LLFunction {
     /**
      * \brief The name of the function
@@ -69,25 +45,13 @@ struct LLFunction {
     const char* name;
 
     /**
-     * \brief Address of the function
-     **/
-    uintptr_t address;
-
-    /**
      * \brief The LLVM function value
      **/
     LLVMValueRef llvmFunction;
 
-    /**
-     * \brief The kind of the function
-     **/
-    LLFunctionKind kind;
-
     LLFunc* func;
-
-    uint64_t noaliasParams;
 };
 
-LLFunction* ll_function_new_definition(uintptr_t, LLFunctionConfig*, LLEngine*);
+LLFunction* ll_function_new_definition(LLFunctionConfig*, LLEngine*);
 
 #endif
