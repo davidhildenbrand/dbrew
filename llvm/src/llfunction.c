@@ -38,6 +38,7 @@
 
 #include <llengine.h>
 #include <llengine-internal.h>
+#include <support-internal.h>
 
 /**
  * \defgroup LLFunction Function
@@ -174,11 +175,21 @@ LLFunction*
 ll_decode_function(uintptr_t address, LLFunctionConfig* config, LLEngine* state)
 {
     LLFunction* function = ll_function_new_definition(config, state);
+
+    // First, lift the function to LLVM-IR, but without the SysV calling
+    // convention.
     ll_func_decode(function->func, address);
+    LLVMValueRef llvm_fn_raw = ll_func_lift(function->func);
+
+    // Then, apply the SysV convention wrapping the lifted function.
     uint64_t noaliasParams;
     LLVMTypeRef fnty = ll_function_unpack_type(config->signature, &noaliasParams, state);
-    function->llvmFunction = ll_func_wrap_sysv(ll_func_lift(function->func), fnty, state->module);
+    function->llvmFunction = ll_func_wrap_sysv(llvm_fn_raw, fnty, state->module);
     ll_function_apply_noalias(function->llvmFunction, noaliasParams, state);
+
+    // Delete original function, we no longer need that.
+    LLVMDeleteFunction(llvm_fn_raw);
+
     return function;
 }
 
@@ -186,6 +197,7 @@ ll_decode_function(uintptr_t address, LLFunctionConfig* config, LLEngine* state)
  * Specialize a function by inlining the base function into a new wrapper
  * function and fixing a parameter. If the length of the value is larger than
  * zero, the memory region starting at value will be fixed, too.
+ * The base function will be deleted.
  *
  * \author Alexis Engelke
  *
@@ -209,10 +221,6 @@ ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_
 
     LLVMTypeRef paramTypes[paramCount];
     LLVMGetParamTypes(fnType, paramTypes);
-
-    // Add alwaysinline attribute such that the optimization routine inlines the
-    // base function for the best results.
-    LLVMAddAttributeAtIndex(base->llvmFunction, -1, ll_support_get_enum_attr(state->context, "alwaysinline"));
 
     if (index >= paramCount)
         warn_if_reached();
@@ -278,6 +286,11 @@ ll_function_specialize(LLFunction* base, uintptr_t index, uintptr_t value, size_
         LLVMBuildRetVoid(builder);
 
     LLVMDisposeBuilder(builder);
+
+    // Inline base function directly...
+    dbll_support_inline_function(retValue);
+    // ... and delete it, to reduce compilation time.
+    LLVMDeleteFunction(base->llvmFunction);
 
     return function;
 }

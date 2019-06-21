@@ -22,8 +22,10 @@
  **/
 
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/IR/Instruction.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Transforms/Utils/Cloning.h>
 #include <llvm-c/ExecutionEngine.h>
 
 #include <support-internal.h>
@@ -80,6 +82,14 @@ dbll_support_create_mcjit_compiler(LLVMExecutionEngineRef* OutJIT, LLVMModuleRef
     }
     *OutError = strdup(Error.c_str());
     return 1;
+}
+
+void
+dbll_support_inline_function(LLVMValueRef call_inst)
+{
+    llvm::CallInst* call = llvm::unwrap<llvm::CallInst>(call_inst);
+    llvm::InlineFunctionInfo ifi;
+    llvm::InlineFunction(llvm::CallSite(call), ifi);
 }
 
 /**
