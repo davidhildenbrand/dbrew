@@ -37,7 +37,7 @@
 #include <llengine.h>
 #include <llengine-internal.h>
 
-#include <rellume/decoder.h>
+#include <rellume/rellume.h>
 
 #include <llfunction.h>
 #include <llfunction-internal.h>

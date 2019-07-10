@@ -8,8 +8,7 @@
 #include <engine.h>
 #include <printer.h>
 
-#include <rellume/basicblock.h>
-#include <rellume/func.h>
+#include <rellume/rellume.h>
 #include <rellume/instr.h>
 
 #include <dbrew-backend.h>
@@ -201,18 +200,28 @@ lldbrew_convert_instr(void* dbi_, LLInstr* lli)
     }
 
     if (lli->operand_count >= 1)
-        convert_operand(&dbi->dst, &lli->dst);
+        convert_operand(&dbi->dst, &lli->ops[0]);
     if (lli->operand_count >= 2)
-        convert_operand(&dbi->src, &lli->src);
+        convert_operand(&dbi->src, &lli->ops[1]);
     if (lli->operand_count >= 3)
-        convert_operand(&dbi->src2, &lli->src2);
+        convert_operand(&dbi->src2, &lli->ops[2]);
 }
 
 static void
 lldbrew_convert_cbb(void* cbb_, LLInstr* lli)
 {
     CBB* cbb = cbb_;
+    assert(instrIsJcc(cbb->endType) || cbb->endType == IT_RET);
     lli->type = _llinst_lut[cbb->endType];
+    // For Jcc, we need to tweak addresses.
+    if (instrIsJcc(cbb->endType))
+    {
+        lli->operand_count = 1;
+        lli->addr = (size_t) cbb->nextFallThrough->generatorData - 1;
+        lli->len = 1;
+        size_t next_branch = (size_t) cbb->nextBranch->generatorData;
+        convert_operand(getImmOp(VT_64, next_branch), &lli->ops[0]);
+    }
 }
 
 /**
@@ -237,11 +246,12 @@ dbrew_llvm_backend(Rewriter* rewriter)
 
     LLInstr instr;
     for (int i = 0; i < rewriter->capBBCount; i++)
+        rewriter->capBB[i].generatorData = (void*) ((size_t) i + (1ul<<48));
+
+    for (int i = 0; i < rewriter->capBBCount; i++)
     {
         CBB* cbb = rewriter->capBB + i;
-        LLBasicBlock* bb = ll_func_add_block(function->func);
-
-        cbb->generatorData = bb;
+        LLBasicBlock* bb = ll_func_add_block(function->func, (size_t) cbb->generatorData);
 
         for (int j = 0; j < cbb->count; j++)
         {
@@ -252,26 +262,13 @@ dbrew_llvm_backend(Rewriter* rewriter)
         if (instr.type != LL_INS_RET)
             ll_basic_block_add_inst(bb, &instr);
     }
-    for (int i = 0; i < rewriter->capBBCount; i++)
-    {
-        CBB* cbb = rewriter->capBB + i;
-        LLBasicBlock* branch = NULL;
-        LLBasicBlock* fallThrough = NULL;
-
-        if (cbb->nextBranch != NULL)
-            branch = cbb->nextBranch->generatorData;
-        if (cbb->nextFallThrough != NULL)
-            fallThrough = cbb->nextFallThrough->generatorData;
-
-        ll_basic_block_add_branches(cbb->generatorData, branch, fallThrough);
-    }
 
     LLVMTypeRef pi8 = LLVMPointerType(LLVMInt8TypeInContext(state->context), 0);
     LLVMTypeRef i64 = LLVMInt64TypeInContext(state->context);
     LLVMTypeRef types[6] = {pi8, pi8, pi8, pi8, pi8, pi8};
     LLVMTypeRef fn_ty = LLVMFunctionType(i64, types, 6, false);
 
-    function->llvmFunction = ll_func_wrap_sysv(ll_func_lift(function->func), fn_ty, state->module);
+    function->llvmFunction = ll_func_wrap_sysv(ll_func_lift(function->func), fn_ty, state->module, 128);
 
     if (function->llvmFunction == NULL)
     {

@@ -30,8 +30,7 @@
 #include <llvm-c/Core.h>
 #include <llvm-c/Support.h>
 
-#include <rellume/basicblock.h>
-#include <rellume/decoder.h>
+#include <rellume/rellume.h>
 
 #include <llfunction.h>
 #include <llfunction-internal.h>
@@ -166,7 +165,6 @@ ll_function_new_definition(LLFunctionConfig* config, LLEngine* state)
     function->name = config->name;
     function->func = ll_func(state->module);
     ll_func_enable_fast_math(function->func, config->fastMath);
-    ll_func_set_stack_size(function->func, config->stackSize);
     ll_func_set_global_base(function->func, 0x1000, state->globalBase);
     return function;
 }
@@ -184,7 +182,7 @@ ll_decode_function(uintptr_t address, LLFunctionConfig* config, LLEngine* state)
     // Then, apply the SysV convention wrapping the lifted function.
     uint64_t noaliasParams;
     LLVMTypeRef fnty = ll_function_unpack_type(config->signature, &noaliasParams, state);
-    function->llvmFunction = ll_func_wrap_sysv(llvm_fn_raw, fnty, state->module);
+    function->llvmFunction = ll_func_wrap_sysv(llvm_fn_raw, fnty, state->module, config->stackSize);
     ll_function_apply_noalias(function->llvmFunction, noaliasParams, state);
 
     // Delete original function, we no longer need that.
