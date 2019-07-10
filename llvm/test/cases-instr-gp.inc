@@ -320,12 +320,12 @@ TEST_CASE("/instr/imul1/8", 02222, 0,
 TEST_CASE("/instr/imul1/flags-64", 02222, 0,
     mov rax, rdi;
     imul rsi;
-    RET_FLAGS_MASK(OF|SF|CF);
+    RET_FLAGS_MASK(OF|CF);
 )
 TEST_CASE("/instr/imul1/flags-8", 02222, 0,
     mov rax, rdi;
     imul sil;
-    RET_FLAGS_MASK(OF|SF|CF);
+    RET_FLAGS_MASK(OF|CF);
 )
 
 TEST_CASE("/instr/imul2/64", 02222, 0,
@@ -345,7 +345,7 @@ TEST_CASE("/instr/imul2/16", 02222, 0,
 )
 TEST_CASE("/instr/imul2/flags", 02222, 0,
     imul rdi, rsi;
-    RET_FLAGS_MASK(OF|SF|CF);
+    RET_FLAGS_MASK(OF|CF);
 )
 
 TEST_CASE("/instr/imul3/64", 02222, 0,
@@ -365,7 +365,7 @@ TEST_CASE("/instr/imul3/16", 02222, 0,
 )
 TEST_CASE("/instr/imul3/flags", 02222, 0,
     imul rdi, rsi, 0x10;
-    RET_FLAGS_MASK(OF|SF|CF);
+    RET_FLAGS_MASK(OF|CF);
 )
 
 
