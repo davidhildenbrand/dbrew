@@ -8,9 +8,9 @@ from statistics import mean
 csv_suffix = ""
 
 # Stencil specifics
-stencil_binary = "./builddir/llvm/benchmark/stencil"
+stencil_binary = "./builddir/origin-llvm/benchmark/stencil"
 stencil_granularities = ( ("element", 0), ("line", 1), ("matrix", 2))
-stencil_datatypes = ( ("Direct", 0), ("Struct", 1), ("SortedStruct", 2))
+stencil_datatypes = ( ("Direct", 0), ("Flat", 1), ("Grouped", 2))
 stencil_compiles = 100
 # measure average execution time accross subruns, so we can
 # calculate the standard derivation
@@ -111,9 +111,9 @@ def benchmark_stencil():
         rtime_stdev_file = open("results-rtimes-stdev-" + granularity[0] + csv_suffix + ".csv", 'w', newline='')
         rtime_stdev_writer = csv.DictWriter(rtime_stdev_file, fieldnames=fieldnames_rtimes)
         rtime_stdev_writer.writeheader()
-        codesize_file = open("results-codesize-" + granularity[0] + csv_suffix + ".csv", 'w', newline='')
-        codesize_writer = csv.DictWriter(codesize_file, fieldnames=fieldnames_rtimes)
-        codesize_writer.writeheader()
+        #codesize_file = open("results-codesize-" + granularity[0] + csv_suffix + ".csv", 'w', newline='')
+        #codesize_writer = csv.DictWriter(codesize_file, fieldnames=fieldnames_rtimes)
+        #codesize_writer.writeheader()
 
         for datatype in stencil_datatypes:
             print("-> datatype: " + datatype[0])
@@ -122,7 +122,7 @@ def benchmark_stencil():
             ctimes_stdev = { 'mode' : datatype[0]}
             rtimes_avg = { 'mode' : datatype[0] }
             rtimes_stdev = { 'mode' : datatype[0]}
-            codesizes = { 'mode' : datatype[0]}
+            #codesizes = { 'mode' : datatype[0]}
             for name, transmode in modes.items():
                 print("--> transmode: " + name)
 
@@ -132,14 +132,14 @@ def benchmark_stencil():
                 rtimes_avg[name] = '%f' % mean(rtimes)
                 rtimes_stdev[name] = '%f' % stdev(rtimes)
 
-                codesize,code = benchmark_stencil_codesize(transmode["stencil"], granularity[1],
-                                                      datatype[1])
-                codesizes[name] = codesize
+                #codesize,code = benchmark_stencil_codesize(transmode["stencil"], granularity[1],
+                #                                      datatype[1])
+                #codesizes[name] = codesize
 
-                code_file = open("results-code-" + granularity[0] + "-" +
-                        datatype[0] + "-" + name + csv_suffix + ".txt", 'w', newline='')
-                code_file.write(code)
-                code_file.close()
+                #code_file = open("results-code-" + granularity[0] + "-" +
+                #        datatype[0] + "-" + name + csv_suffix + ".txt", 'w', newline='')
+                #code_file.write(code)
+                #code_file.close()
 
                 # native has no compilation
                 if name == "native":
@@ -155,7 +155,7 @@ def benchmark_stencil():
             ctime_stdev_writer.writerow(ctimes_stdev)
             rtime_writer.writerow(rtimes_avg)
             rtime_stdev_writer.writerow(rtimes_stdev)
-            codesize_writer.writerow(codesizes)
+            #codesize_writer.writerow(codesizes)
 
 
 parser = argparse.ArgumentParser(description='Run binary code optimization benchmarks')
